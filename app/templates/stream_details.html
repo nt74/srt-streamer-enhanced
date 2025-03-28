@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Details {{ stream_key }} - MCR SRT Streamer</title> 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> 
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="{{ url_for('static', filename='js/theme-switcher.js') }}"></script> 
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>
+                <i class="fas fa-broadcast-tower"></i> Stream Details 
+                {% if stream.mode == 'caller' %}
+                    <span class="badge bg-warning text-dark">Caller: {{ stream.target or stream_key }}</span>
+                {% else %}
+                    <span class="badge bg-primary">Listener Port: {{ stream_key }}</span>
+                {% endif %}
+            </h1>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+                <form method="POST" action="{{ url_for('stop_stream', stream_key=stream_key) }}" style="display: inline;">
+                    {# Ensure CSRF token is included if needed by Flask-WTF #}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> 
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Stop stream {{ stream_key }}?')">
+                        <i class="fas fa-stop-circle"></i> Stop Stream
+                    </button>
+                </form>
+                 <button class="btn btn-outline-secondary ms-2" id="theme-toggler" type="button">
+                    <i class="fas fa-moon" id="theme-icon-dark"></i>
+                    <i class="fas fa-sun d-none" id="theme-icon-light"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="card mb-4" id="stream-info" data-stream-key="{{ stream_key }}"> 
+            <div class="card-header bg-primary text-white"> 
+                <i class="fas fa-info-circle"></i> Stream Information
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong><i class="fas fa-file-video fa-fw"></i> File:</strong> <span class="text-break">{{ stream.file_path }}</span></p>
+                        <p><strong><i class="fas fa-sign-in-alt fa-fw"></i> Mode:</strong> {{ stream.mode|capitalize }}</p>
+                         {% if stream.mode == 'caller' %}
+                        <p><strong><i class="fas fa-map-marker-alt fa-fw"></i> Target:</strong> {{ stream.target or 'N/A' }}</p>
+                         {% endif %}
+                        <p><strong><i class="fas fa-history fa-fw"></i> Latency:</strong> {{ stream.latency }} ms</p>
+                        <p><strong><i class="fas fa-network-wired fa-fw"></i> Overhead:</strong> {{ stream.overhead_bandwidth }}%</p>
+                        
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong><i class="fas fa-lock fa-fw"></i> Encryption:</strong> 
+                           {{ (stream.encryption | capitalize).replace('_', '-') }} 
+                           {% if stream.encryption != 'none' %}
+                               {# ***** CORRECTED |safe filter placement ***** #}
+                               ({{ ('<span class="badge bg-success">Passphrase Set</span>' if stream.passphrase_set else '<span class="badge bg-danger">Passphrase Missing</span>') | safe }}) 
+                           {% endif %}
+                        </p>
+                        <p><strong><i class="fas fa-calendar-alt fa-fw"></i> Started:</strong> {{ stream.start_time }}</p>
+                        <p><strong><i class="fas fa-hourglass-half fa-fw"></i> Uptime:</strong> <span id="uptime">Calculating...</span></p>
+                        <p><strong><i class="fas fa-wifi fa-fw"></i> Status:</strong> 
+                            <span id="status" class="badge">
+                                {{ stream.connection_status }}
+                            </span>
+                        </p>
+                        {% if stream.mode == 'listener' %}
+                        <p><strong><i class="fas fa-user fa-fw"></i> Client:</strong> <span id="client-ip">{{ stream.connected_client or 'None' }}</span></p>
+                         {% endif %}
+                    </div>
+                </div>
+                 <p class="mt-2 mb-0"><small><strong><i class="fas fa-link fa-fw"></i> SRT URI:</strong> <code class="text-break">{{ stream.srt_uri }}</code></small></p>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white"><i class="fas fa-tachometer-alt"></i> Bitrate</div>
+                    <div class="card-body text-center">
+                        <div class="stat-circle">
+                            <span id="bitrate-value" class="stat-value">0</span>
+                            <span class="stat-unit">Mbps</span>
+                        </div>
+                        <div class="progress progress-thin mt-2">
+                            <div class="progress-bar bg-success" id="bitrate-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                         <small class="text-muted" id="send-rate-label">Send Rate</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white"><i class="fas fa-exchange-alt"></i> Round Trip Time</div>
+                    <div class="card-body text-center">
+                        <div class="stat-circle">
+                            <span id="rtt-value" class="stat-value">0</span>
+                            <span class="stat-unit">ms</span>
+                        </div>
+                         <div class="progress progress-thin mt-2">
+                             <div class="progress-bar bg-info" id="rtt-bar" role="progressbar" style="width: 0%"></div>
+                         </div>
+                         <small class="text-muted">Network Latency</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-danger text-white"><i class="fas fa-exclamation-triangle"></i> Packet Loss</div>
+                    <div class="card-body text-center">
+                        <div class="stat-circle">
+                            <span id="loss-value" class="stat-value">0</span>
+                            <span class="stat-unit">%</span>
+                        </div>
+                         <div class="progress progress-thin mt-2">
+                             <div class="progress-bar bg-danger" id="loss-bar" role="progressbar" style="width: 0%"></div>
+                         </div>
+                         <small class="text-muted" id="loss-detail">Lost / Sent</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-chart-line"></i> Statistics History (Last 30 points)
+            </div>
+            <div class="card-body">
+                <canvas id="stats-chart" height="100"></canvas> </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="fas fa-list-alt"></i> Packet Statistics
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-borderless mb-0">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Pkts Sent:</strong></td><td id="packets-sent" class="text-end">0</td>
+                                    <td><strong>Pkts Recv:</strong></td><td id="packets-received" class="text-end">0</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Pkts Lost:</strong></td><td id="packets-lost" class="text-end">0</td>
+                                    <td><strong>Pkts Retrans:</strong></td><td id="packets-retransmitted" class="text-end">0</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Bytes Sent:</strong></td><td id="bytes-sent" colspan="3" class="text-end">0 B</td>
+                                </tr>
+                           </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+             <div class="col-md-6">
+                <div class="card mb-4">
+                     <div class="card-header bg-secondary text-white">
+                         <i class="fas fa-layer-group"></i> Buffer / Window
+                     </div>
+                     <div class="card-body">
+                         <table class="table table-sm table-borderless mb-0">
+                             <tbody>
+                                 <tr>
+                                     <td><strong>Send Buffer:</strong></td><td id="send-buffer-level" class="text-end">0 ms</td>
+                                     <td><strong>Flow Window:</strong></td><td id="flow-window" class="text-end">0 pkts</td>
+                                 </tr>
+                                 <tr>
+                                     <td><strong>Recv Buffer:</strong></td><td id="recv-buffer-level" class="text-end">0 ms</td>
+                                     <td></td><td></td></tr>
+                             </tbody>
+                         </table>
+                     </div>
+                </div>
+            </div>
+            <div class="col-12"> 
+                <div class="card mb-4">
+                    <div class="card-header bg-dark text-white">
+                        <i class="fas fa-bug"></i> Debug Information
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2 d-md-block"> 
+                            <button class="btn btn-sm btn-outline-secondary" type="button" id="show-debug-info">
+                                <i class="fas fa-code"></i> Show Raw Stats
+                            </button>
+                            <span class="text-muted ms-md-3">Last Updated: <span id="stats-last-updated">-</span></span>
+                        </div>
+                        <div id="debug-info" style="display:none; margin-top:15px;">
+                            <pre class="bg-light p-2 border rounded" style="max-height:300px; overflow-y:auto;" id="debug-content">Loading...</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> </div> <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const streamInfoDiv = document.getElementById('stream-info');
+            const streamKey = streamInfoDiv ? streamInfoDiv.dataset.streamKey : null; 
+            if (!streamKey) { console.error("Stream key not found."); return; }
+
+            let chart = null; const maxChartPoints = 30;
+            const chartData = { labels: [], datasets: [ { label: 'Bitrate (Mbps)', data: [], yAxisID: 'y', borderColor: 'rgba(40, 167, 69, 1)', backgroundColor: 'rgba(40, 167, 69, 0.1)', borderWidth: 1.5, tension: 0.1, pointRadius: 1, fill: true }, { label: 'RTT (ms)', data: [], yAxisID: 'y1', borderColor: 'rgba(23, 162, 184, 1)', backgroundColor: 'rgba(23, 162, 184, 0.1)', borderWidth: 1.5, tension: 0.1, pointRadius: 1, fill: false }, { label: 'Loss (%)', data: [], yAxisID: 'y2', borderColor: 'rgba(220, 53, 69, 1)', backgroundColor: 'rgba(220, 53, 69, 0.1)', borderWidth: 1.5, tension: 0.1, pointRadius: 1, fill: false } ] };
+            
+            function initChart() {
+                const ctx = document.getElementById('stats-chart')?.getContext('2d');
+                if (!ctx) { console.error("Chart canvas not found"); return; }
+                chart = new Chart(ctx, { type: 'line', data: chartData, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: { title: { display: false } }, y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Bitrate (Mbps)' }, beginAtZero: true }, y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'RTT (ms)' }, grid: { drawOnChartArea: false }, beginAtZero: true }, y2: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Loss (%)' }, grid: { drawOnChartArea: false }, beginAtZero: true, suggestedMax: 5 } }, animation: false, plugins: { legend: { display: true, position: 'top'} } } });
+            }
+            
+            async function updateStats() {
+                if (!streamKey) return;
+                try {
+                    const response = await fetch(`/api/stats/${streamKey}`);
+                    if (!response.ok) { console.error(`Error fetching stats: ${response.status} ${response.statusText}`); return; }
+                    const data = await response.json();
+                    if (!data || data.error) { console.error("Error in stats data:", data?.error); return; }
+
+                    const statusElem = document.getElementById('status');
+                    if (statusElem) { statusElem.className = 'badge'; if (data.connection_status === 'Connected') statusElem.classList.add('bg-success'); else if (data.connection_status === 'Waiting for connection' || data.connection_status === 'Connecting...') statusElem.classList.add('bg-info'); else statusElem.classList.add('bg-danger'); statusElem.textContent = data.connection_status || 'Unknown'; }
+                    setText('client-ip', data.connected_client || 'None');
+                    setText('bitrate-value', (data.bitrate_mbps || 0).toFixed(2));
+                    setText('rtt-value', (data.rtt_ms || 0).toFixed(0));
+                    setText('loss-value', (data.loss_rate || 0).toFixed(2));
+                    const bitratePercent = Math.min(100, (data.bitrate_mbps / 50) * 100); 
+                    const rttPercent = Math.min(100, (data.rtt_ms / 500) * 100); 
+                    const lossPercent = Math.min(100, (data.loss_rate / 5) * 100); 
+                    setWidth('bitrate-bar', bitratePercent); setWidth('rtt-bar', rttPercent); setWidth('loss-bar', lossPercent);
+                    setText('packets-sent', (data.packets_sent || 0).toLocaleString()); setText('packets-received', (data.packets_received || 0).toLocaleString()); setText('packets-lost', (data.packets_lost || 0).toLocaleString()); setText('packets-retransmitted', (data.packets_retransmitted || 0).toLocaleString());
+                    setText('bytes-sent', formatBytes(data.bytes_sent || 0)); setText('uptime', data.uptime || '0s');
+                    setText('send-buffer-level', `${(data.send_buffer_level_ms || 0)} ms`); setText('recv-buffer-level', `${(data.recv_buffer_level_ms || 0)} ms`); setText('flow-window', `${(data.flow_window || 0).toLocaleString()} pkts`);
+                    setText('stats-last-updated', new Date(data.last_updated * 1000).toLocaleTimeString());
+
+                    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                    if (chartData.labels.length >= maxChartPoints) { chartData.labels.shift(); chartData.datasets.forEach(dataset => dataset.data.shift()); }
+                    chartData.labels.push(now); chartData.datasets[0].data.push(data.bitrate_mbps || 0); chartData.datasets[1].data.push(data.rtt_ms || 0); chartData.datasets[2].data.push(data.loss_rate || 0);
+                    if (chart) { chart.update(); }
+                } catch (error) { console.error("Error processing stats update:", error); }
+            }
+            
+            function setText(id, text) { const elem = document.getElementById(id); if (elem) elem.textContent = text; }
+            function setWidth(id, percentage) { const elem = document.getElementById(id); if (elem) elem.style.width = `${percentage}%`; }
+            function formatBytes(bytes, decimals = 2) { if (bytes === 0 || !bytes) return '0 B'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ['B', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]; }
+            
+            const debugButton = document.getElementById('show-debug-info'), debugInfoDiv = document.getElementById('debug-info'), debugContentPre = document.getElementById('debug-content');
+            if (debugButton && debugInfoDiv && debugContentPre) {
+                 debugButton.addEventListener('click', async () => {
+                     if (debugInfoDiv.style.display === 'none') {
+                         debugInfoDiv.style.display = 'block'; debugButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...'; debugButton.disabled = true;
+                         try { const response = await fetch(`/api/debug/${streamKey}`); const data = await response.json(); debugContentPre.textContent = JSON.stringify(data, null, 2); debugButton.innerHTML = '<i class="fas fa-minus-circle"></i> Hide Raw Stats';
+                         } catch (error) { debugContentPre.textContent = 'Error fetching debug information.'; console.error("Debug fetch error:", error); debugButton.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error'; } finally { debugButton.disabled = false; }
+                     } else { debugInfoDiv.style.display = 'none'; debugButton.innerHTML = '<i class="fas fa-code"></i> Show Raw Stats'; }
+                 });
+            }
+            
+            initChart(); updateStats(); setInterval(updateStats, 2000); 
+        });
+    </script>
+</body>
+</html>

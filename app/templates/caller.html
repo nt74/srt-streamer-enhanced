@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRT Caller Mode - MCR SRT Streamer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        /* Include specific styles if needed, or keep using style.css */
+        .form-text {
+            font-size: 0.85rem;
+        }
+        .input-group-text {
+            min-width: 40px;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-phone-alt"></i> SRT Caller Mode</h1>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>Error:</strong> {{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark"> <i class="fas fa-paper-plane"></i> Start Outgoing Caller Stream
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('caller_page') }}" id="caller-form">
+                    {{ form.csrf_token }}
+
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            {{ form.target_address.label(class="form-label") }}
+                            {{ form.target_address(class="form-control" + (' is-invalid' if form.target_address.errors else '')) }}
+                            <div class="form-text">Hostname or IP address of the SRT listener.</div>
+                            {% if form.target_address.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.target_address.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.target_port.label(class="form-label") }}
+                            {{ form.target_port(class="form-control" + (' is-invalid' if form.target_port.errors else '')) }}
+                             <div class="form-text">Port the SRT listener is using.</div>
+                            {% if form.target_port.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.target_port.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.file_path.label(class="form-label") }}
+                        <div class="input-group">
+                            {{ form.file_path(class="form-control" + (' is-invalid' if form.file_path.errors else ''), placeholder="Select media file") }}
+                            <button type="button" class="btn btn-secondary" id="browse-media-caller">
+                                <i class="fas fa-folder-open"></i> Browse
+                            </button>
+                        </div>
+                        <div id="fileHelpCaller" class="form-text">Select a .ts file from your media library to stream.</div>
+                        {% if form.file_path.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.file_path.errors %}{{ error }}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            {{ form.latency.label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.latency(class="form-control" + (' is-invalid' if form.latency.errors else '')) }}
+                                <span class="input-group-text">ms</span>
+                            </div>
+                            <div class="form-text">Transmission latency (network buffer).</div>
+                             {% if form.latency.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.latency.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                             <div class="d-flex justify-content-between align-items-center">
+                                {{ form.overhead_bandwidth.label(class="form-label") }}
+                                <i class="fas fa-info-circle text-primary parameter-help" 
+                                   data-bs-toggle="tooltip" 
+                                   title="{{ form.overhead_bandwidth.description }}"></i>
+                            </div>
+                            {{ form.overhead_bandwidth(class="form-control" + (' is-invalid' if form.overhead_bandwidth.errors else '')) }}
+                             <div class="form-text">Bandwidth reserve for retransmissions.</div>
+                             {% if form.overhead_bandwidth.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.overhead_bandwidth.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            {{ form.encryption.label(class="form-label") }}
+                            {{ form.encryption(class="form-select" + (' is-invalid' if form.encryption.errors else '')) }}
+                            {% if form.encryption.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.encryption.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 caller-encryption-options" style="display: none;">
+                            {{ form.passphrase.label(class="form-label") }}
+                            {{ form.passphrase(class="form-control" + (' is-invalid' if form.passphrase.errors else ''), placeholder="Min 10 characters") }}
+                            {% if form.passphrase.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.passphrase.errors %}{{ error }}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex">
+                        <button type="submit" class="btn btn-warning me-2"> <i class="fas fa-play"></i> Start Caller Stream
+                        </button>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <footer class="mt-5 mb-3 text-center text-muted">
+            <hr>
+            <p>&copy; 2025 Nikos Toutountzoglou, Sveriges Television AB.</p>
+        </footer>
+    </div>
+
+    <div class="modal fade" id="mediaBrowserModal" tabindex="-1" aria-labelledby="mediaBrowserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="mediaBrowserModalLabel">
+                        <i class="fas fa-folder-open"></i> Select Media File
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6>Available Media Files</h6>
+                        <button id="refresh-media-caller" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="media-files-caller">
+                            <thead>
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Size</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                </tbody>
+                        </table>
+                    </div>
+                    <div id="media-loading-caller" class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading media files...</p>
+                    </div>
+                    <div id="media-error-caller" class="alert alert-danger" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            })
+
+            // Toggle encryption options based on selection
+            $('#encryption').change(function() {
+                if ($(this).val() === 'none') {
+                    $('.caller-encryption-options').hide();
+                } else {
+                    $('.caller-encryption-options').show();
+                }
+            }).trigger('change'); // Trigger on page load
+
+            // Media browser functionality for Caller page
+            $('#browse-media-caller').click(function() {
+                loadMediaFilesCaller();
+                $('#mediaBrowserModal').modal('show');
+            });
+            
+            $('#refresh-media-caller').click(loadMediaFilesCaller);
+
+            // Load media files (specific to caller page elements)
+            function loadMediaFilesCaller() {
+                $('#media-files-caller tbody').empty();
+                $('#media-loading-caller').show();
+                $('#media-error-caller').hide();
+                
+                $.ajax({
+                    url: '/media', // Use the same media listing endpoint
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        $('#media-loading-caller').hide();
+                        
+                        if (data.length === 0) {
+                            $('#media-files-caller tbody').append('<tr><td colspan="3" class="text-center">No media files found</td></tr>');
+                            return;
+                        }
+                        
+                        data.forEach(function(file) {
+                            const row = `
+                                <tr>
+                                    <td>${file.name}</td>
+                                    <td>${formatBytes(file.size)}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary select-media-caller" data-file="${file.name}">
+                                            <i class="fas fa-check"></i> Select
+                                        </button>
+                                        <a href="/media_info/${file.name}" target="_blank" class="btn btn-sm btn-info">
+                                            <i class="fas fa-info-circle"></i> Info
+                                        </a>
+                                    </td>
+                                </tr>
+                            `;
+                            $('#media-files-caller tbody').append(row);
+                        });
+                        
+                        // Attach click handlers for select buttons
+                        $('.select-media-caller').click(function() {
+                            const fileName = $(this).data('file');
+                            $('#file_path').val(fileName); // Update the correct form field ID
+                            $('#mediaBrowserModal').modal('hide');
+                        });
+                    },
+                    error: function(xhr, status, error) {
+                        $('#media-loading-caller').hide();
+                        $('#media-error-caller').show().text('Error loading media files: ' + error);
+                    }
+                });
+            }
+            
+            // Helper function to format bytes (copied from index.html)
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+        });
+    </script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 
 `srt-streamer-enhanced` is a professional solution for testing SRT (Secure Reliable Transport) listeners and callers. Built with Python, Flask, and the GStreamer multimedia framework, it provides a web interface to manage and monitor multiple SRT streams originating from pre-recorded Transport Stream (TS) files.
 
-The core functionality revolves around a carefully configured GStreamer pipeline (`filesrc ! tsparse ! srtsink`) designed for stable, DVB-compliant TS-over-SRT streaming, making it ideal for testing professional SRT IRDs and receivers (Ateme, Appear, Haivision, etc.). The web interface uses Bootstrap 5, jQuery, and Chart.js for a dynamic and informative user experience. Configuration recommendations derived from the Network Test feature are based on principles outlined in documents like the Haivision SRT Deployment Guide.
+The core functionality revolves around a carefully configured GStreamer pipeline (`filesrc ! tsparse ! srtsink`) designed for stable, DVB-compliant TS-over-SRT streaming, making it ideal for testing professional SRT IRDs and receivers (Ateme, Appear, Haivision, etc.). The web interface uses Bootstrap 5, jQuery, and Chart.js for a dynamic and informative user experience. Configuration recommendations derived from the Network Test feature are based on principles outlined in documents like the Haivision SRT Deployment Guide[cite: 1].
 
 ## Features
 
@@ -15,7 +15,7 @@ The core functionality revolves around a carefully configured GStreamer pipeline
     * Parses Transport Streams using `tsparse` with timestamping, 7-packet alignment, and **`smoothing-latency=20000` (20ms)** to reduce PCR jitter for professional receivers.
     * Transmits using `srtsink` configured with user-defined latency, overhead, encryption, and specific DVB/SRT parameters (large buffers, `tlpktdrop`, NAK reports, etc.).
 * **DVB Compliance Focus:** Applies specific SRT parameters (`dvb_config.py`) and `tsparse` settings suitable for DVB transport stream carriage.
-* **Integrated Network Testing:** Measures RTT/Loss using `ping`/`iperf3`, recommends SRT Latency/Overhead (based on SRT Guide principles), and allows applying settings to the stream form.
+* **Integrated Network Testing:** Measures RTT/Loss using `ping`/`iperf3`, recommends SRT Latency/Overhead (based on SRT Guide principles [cite: 303, 348]), and allows applying settings to the stream form.
 * **Real-time Monitoring & Statistics:** Dashboard with live status, detailed stream view with charts (Chart.js) for Bitrate/RTT/Loss history, packet counters, buffer levels, and debug info API.
 * **Media Management:** AJAX media browser modal lists `.ts` files; Media Info page uses `ffprobe`/`mediainfo`. Potential upload support.
 * **Dynamic Web Interface:** Built with Bootstrap 5, jQuery. Includes dashboard, caller page, network test page, stream details. AJAX updates for system info & streams. Theme switcher.
@@ -26,14 +26,14 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 ## Technology Stack
 
 * **Backend:** Python 3, Flask, Flask-WTF, Waitress, GStreamer 1.0 (via PyGObject), `requests`, `psutil`.
-* **Frontend:** Bootstrap 5, jQuery, Chart.js, Font Awesome (via CDN), Jinja2, Custom JS.
-* **Supporting:** NGINX, `ffmpeg` (ffprobe), `mediainfo`, `iperf3`, `ping`, `curl`, `dig`, Systemd (recommended).
+* **Frontend:** Bootstrap 5, jQuery, Chart.js, Font Awesome (via CDN), Jinja2, Custom JS (`static/js/theme-switcher.js`).
+* **Supporting:** NGINX, `ffmpeg` (for ffprobe), `mediainfo`, `iperf3`, `ping`, `curl`, `dig`, Systemd (recommended).
 
 ## Architecture Overview
 
 1.  **Backend (`app/`):** Python/Flask app. `StreamManager` controls GStreamer. `NetworkTester` runs checks. `utils.py` provides system info. Logs to `/var/log/srt-streamer/srt_streamer.log`. Caches in `app/data/`.
 2.  **Frontend (NGINX):** Reverse proxy, Basic Auth, serves static files.
-3.  **Startup (`start.sh`):** Tunes network, fetches IP, activates venv, starts Waitress.
+3.  **Startup (`start.sh`):** Tunes network (`sysctl`), fetches IP, activates venv, starts Waitress.
 4.  **GStreamer Pipeline Structure:** The core streaming logic uses a GStreamer pipeline dynamically constructed similar to this template:
     ```gst-pipeline
     filesrc location="..." ! \
@@ -61,13 +61,13 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
     * Clone the repository or download the source code.
         ```bash
         # Example using git
-        sudo git clone <repository_url> /opt/srt-streamer-enhanced
+        sudo git clone [https://github.com/nt74/srt-streamer-enhanced.git](https://github.com/nt74/srt-streamer-enhanced.git) /opt/srt-streamer-enhanced
         cd /opt/srt-streamer-enhanced
         ```
 
 2.  **Install System Dependencies:**
-    * Install necessary packages for your distribution.
-    * **Debian / Ubuntu:**
+    * Install necessary packages for your distribution (Python 3, pip, venv, GStreamer + plugins, Nginx, curl, iperf3, ping, dig, ffmpeg, mediainfo).
+    * **Debian / Ubuntu Example:**
         ```bash
         sudo apt update && sudo apt install -y \
             python3 python3-pip python3-venv python3-gi gir1.2-gobject-2.0 \
@@ -77,33 +77,30 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             gstreamer1.0-tools gstreamer1.0-libav \
-            nginx curl iperf3 iputils-ping dnsutils ffmpeg mediainfo
+            nginx curl iperf3 iputils-ping dnsutils ffmpeg mediainfo apache2-utils
         ```
-    * **RHEL / Rocky / Fedora:**
+    * **RHEL / Rocky / Fedora Example:**
         ```bash
         sudo dnf update && sudo dnf install -y \
             python3 python3-pip python3-gobject gobject-introspection-devel \
             cairo-gobject-devel python3-devel pkgconf-pkg-config gcc \
             gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
             gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav \
-            nginx curl iperf3 iputils bind-utils ffmpeg mediainfo
+            nginx curl iperf3 iputils bind-utils ffmpeg mediainfo httpd-tools
         ```
         *(Use `yum` instead of `dnf` on older RHEL/CentOS)*
 
 3.  **Set Up Python Environment:**
-    * Create a virtual environment:
+    * Create and activate a Python virtual environment (e.g., `/opt/venv`).
         ```bash
         sudo python3 -m venv /opt/venv
-        ```
-    * Activate the virtual environment:
-        ```bash
         source /opt/venv/bin/activate
         ```
-    * Install required Python packages using the provided `requirements.txt`:
+    * Install required Python packages using `requirements.txt` (ensure this file exists in your project root):
         ```bash
         pip install -r requirements.txt
         ```
-    * Deactivate the environment (it will be activated by `start.sh` or the systemd service):
+    * Deactivate the environment.
         ```bash
         deactivate
         ```
@@ -113,70 +110,42 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
     * **Log/Data Directories:** Create directories and set permissions (adjust owner if not running service as root):
         ```bash
         sudo mkdir -p /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
-        sudo chown root:root /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
+        sudo chown <service_user>:<service_group> /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
         ```
+        *(Replace `<service_user>:<service_group>` with appropriate values, e.g., `root:root`)*
     * **NGINX:**
-        * Configure Nginx as a reverse proxy for `http://127.0.0.1:5000`. A sample config snippet might look like:
-          ```nginx
-          server {
-              listen 80; # Or your desired port
-              server_name your_server_ip_or_domain;
-
-              location / {
-                  proxy_pass [http://127.0.0.1:5000](http://127.0.0.1:5000);
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-
-                  # Basic Authentication
-                  auth_basic "Restricted Content";
-                  auth_basic_user_file /etc/nginx/.htpasswd; # Path to your password file
-              }
-          }
-          ```
-        * Create a password file for Basic Authentication (e.g., for user `admin`):
-          ```bash
-          sudo apt install -y apache2-utils # Debian/Ubuntu
-          # sudo dnf install -y httpd-tools # RHEL/Fedora
-          sudo htpasswd -c /etc/nginx/.htpasswd admin
-          # Enter a strong password when prompted
-          sudo chown www-data:www-data /etc/nginx/.htpasswd # Adjust owner for your Nginx user
-          sudo chmod 640 /etc/nginx/.htpasswd
-          ```
-        * Enable the Nginx site and test configuration:
-          ```bash
-          # Example: sudo ln -s /etc/nginx/sites-available/srt-streamer /etc/nginx/sites-enabled/
-          sudo nginx -t
-          sudo systemctl restart nginx
-          ```
+        * Configure Nginx as a reverse proxy for `http://127.0.0.1:5000`.
+        * Create a password file (e.g., `/etc/nginx/.htpasswd`) for Basic Authentication using `htpasswd`. **Set a strong password and change the example user `admin`.** Secure the file permissions.
+            ```bash
+            sudo htpasswd -c /etc/nginx/.htpasswd admin
+            # Enter password
+            sudo chown www-data:www-data /etc/nginx/.htpasswd # Adjust for Nginx user
+            sudo chmod 640 /etc/nginx/.htpasswd
+            ```
+        * Add/Enable the Nginx site configuration and test/restart Nginx.
     * **Flask Secret Key:** Generate a strong secret key:
         ```bash
         openssl rand -hex 32
         ```
-        **Copy this key.** You will need it for the systemd service file or to set it as an environment variable manually. **DO NOT use a default or weak key.**
+        **Copy this key.** You will need it for the systemd service file.
     * **Startup Script:** Make `start.sh` executable:
         ```bash
         sudo chmod +x /opt/srt-streamer-enhanced/start.sh
         ```
 
 5.  **Set Up Systemd Service (Recommended):**
-    * Create the service file `/etc/systemd/system/srt-streamer.service`:
+    * Create/Edit the service file `/etc/systemd/system/srt-streamer.service`.
         ```ini
         [Unit]
         Description=SRT Streamer Enhanced - DVB Compliant
-        After=network.target nginx.service # Ensure Nginx starts first
+        After=network.target nginx.service
 
         [Service]
         Type=simple
-        User=root # Simplifies permissions, review if non-root needed
+        User=root # Review if non-root needed
         WorkingDirectory=/opt/srt-streamer-enhanced
-
-        # --- IMPORTANT: Paste your generated SECRET_KEY here! ---
         Environment="SECRET_KEY=paste_your_generated_secret_key_here"
-        # Optional: Override media folder
         # Environment="MEDIA_FOLDER=/srv/media/srt-sources"
-
         ExecStart=/opt/srt-streamer-enhanced/start.sh
         Restart=on-failure
         RestartSec=5
@@ -194,10 +163,7 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
         sudo systemctl start srt-streamer.service
         ```
 
-6.  **Verify:**
-    * Check the service status: `sudo systemctl status srt-streamer.service`
-    * Check logs: `sudo journalctl -u srt-streamer.service -f` and `sudo tail -f /var/log/srt-streamer/srt_streamer.log`.
-    * Access the application via the Nginx URL in your browser and log in with the `admin` user and the password you set.
+6.  **Verify:** Check service status (`systemctl status`), logs (`journalctl`, app log file), and access the web UI via the Nginx address.
 
 ## Usage Workflow
 
@@ -210,17 +176,17 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 
 ## Configuration & Tuning Tips (from SRT Guide)
 
-* **SRT Latency:** This determines the buffer size for handling network jitter and packet retransmissions[cite: 290, 376]. It should generally be set to at least RTT Multiplier * RTT[cite: 323]. A common starting point is 4x RTT for decent networks[cite: 381]. The higher value set between the sender and receiver is used[cite: 385].
-* **Bandwidth Overhead:** Reserve extra bandwidth (%) for packet retransmissions[cite: 361]. Higher loss rates require more overhead[cite: 349]. Ensure `Stream Bitrate * (1 + Overhead %)` is well within your available channel capacity[cite: 306].
+* **SRT Latency:** Determines buffer size for jitter and retransmissions[cite: 290, 376]. Set based on RTT (e.g., 4x RTT [cite: 381]) and network stability. Higher value of sender/receiver setting is used[cite: 385]. Adjust based on buffer monitoring.
+* **Bandwidth Overhead:** Reserve extra bandwidth (%) for packet recovery[cite: 361]. Higher loss needs more overhead[cite: 349]. Ensure total bandwidth fits link capacity[cite: 306].
 * **Monitoring Buffers (Stream Details Page):**
-    * **Sender:** If the "Send Buffer Level" consistently exceeds the configured "Latency" line, your bitrate might be too high for the available bandwidth, or the overhead is insufficient[cite: 617, 472]. Consider lowering bitrate first. If it only spikes occasionally, increasing Latency might help[cite: 473].
-    * **Receiver:** If the "Recv Buffer Level" often drops near zero, it indicates packets aren't arriving in time[cite: 470]. If this happens frequently, the bitrate may be too high[cite: 470]. If occasional, increasing Latency might provide more time for recovery[cite: 471].
-* **Packet Loss:** "Lost Packets" reported by the sender indicate network drops[cite: 424]. "Skipped Packets" reported by the receiver mean packets arrived too late (or never) to be played, potentially causing artifacts[cite: 427, 630]. If skipped packets increase slowly, try increasing Latency[cite: 638]; if in large jumps, try lowering bitrate or increasing Bandwidth Overhead[cite: 639].
+    * **Sender:** Consistent high Send Buffer Level often means bitrate too high or overhead too low[cite: 617, 472]. Occasional spikes might be handled by increasing Latency[cite: 473].
+    * **Receiver:** Frequent drops to zero suggest bitrate too high[cite: 470]. Occasional drops might need more Latency[cite: 471].
+* **Packet Loss:** Monitor Lost/Skipped packets. Increase Latency for slow/jitter-related increases[cite: 638]. Lower Bitrate or increase Overhead for large jumps/bursts[cite: 639].
 
 ## References
 
-* Haivision, "SRT Protocol Deployment Guide Version 1.5.x", 28 Mar 2025. [cite: 1] (Provided PDF)
-* SRT Alliance: [https://www.srtalliance.org/](https://www.srtalliance.org/)
-* SRT GitHub Repository: [https://github.com/Haivision/srt](https://github.com/Haivision/srt)
+* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf) [cite: 1]
+* [SRT Alliance](https://www.srtalliance.org/)
+* [SRT GitHub Repository](https://github.com/Haivision/srt)
 
 ---

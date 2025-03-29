@@ -33,6 +33,13 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 3.  **Startup (`start.sh`):** Tunes network, fetches IP, activates venv, starts Waitress.
 4.  **GStreamer Pipeline:** `filesrc ! tsparse ! srtsink` with parameters.
 
+## System Requirements
+
+* **Operating System:** Debian/Ubuntu or Rocky Linux/RHEL (or equivalent distributions with GStreamer 1.0+ support).
+* **RAM:** Allocate approximately 1 GB of RAM per simultaneous SRT stream planned. For the maximum of 10 streams, at least 10 GB of RAM is recommended.
+* **CPU/GPU:** CPU usage is expected to be relatively low as the application primarily shuffles TS packets between file input and the SRT protocol (demuxing/remuxing) rather than performing computationally intensive transcoding or encoding. GPU is not utilized.
+* **Network:** A stable network connection with sufficient bandwidth (considering stream bitrate + SRT overhead) is required. Network tuning (via `start.sh` or system configuration) is recommended for optimal performance, especially for high-bitrate streams.
+
 ## Target Environments
 
 Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora families.

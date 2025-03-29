@@ -10,8 +10,11 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 
 * **Multi-Stream Hosting:** Host up to 10 simultaneous SRT streams.
 * **Listener & Caller Modes:** Easily start streams in either Listener (server) or Caller (client) mode via dedicated forms.
-* **GStreamer Pipeline:** Uses `filesrc ! tsparse ! srtsink` with specific DVB/SRT parameters (latency, overhead, encryption, buffers, etc.).
-* **DVB Compliance Focus:** Enforces specific SRT parameters suitable for DVB TS carriage.
+* **GStreamer Pipeline (`filesrc ! tsparse ! srtsink`):**
+    * Reads local `.ts` files using `filesrc`.
+    * Parses Transport Streams using `tsparse` with timestamping, 7-packet alignment, and **`smoothing-latency=20000` (20ms)** to reduce PCR jitter for professional receivers.
+    * Transmits using `srtsink` configured with user-defined latency, overhead, encryption, and specific DVB/SRT parameters (large buffers, `tlpktdrop`, NAK reports, etc.).
+* **DVB Compliance Focus:** Applies specific SRT parameters (`dvb_config.py`) and `tsparse` settings suitable for DVB transport stream carriage.
 * **Integrated Network Testing:** Measures RTT/Loss using `ping`/`iperf3`, recommends SRT Latency/Overhead (based on SRT Guide principles), and allows applying settings to the stream form.
 * **Real-time Monitoring & Statistics:** Dashboard with live status, detailed stream view with charts (Chart.js) for Bitrate/RTT/Loss history, packet counters, buffer levels, and debug info API.
 * **Media Management:** AJAX media browser modal lists `.ts` files; Media Info page uses `ffprobe`/`mediainfo`. Potential upload support.
@@ -31,7 +34,13 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 1.  **Backend (`app/`):** Python/Flask app. `StreamManager` controls GStreamer. `NetworkTester` runs checks. `utils.py` provides system info. Logs to `/var/log/srt-streamer/srt_streamer.log`. Caches in `app/data/`.
 2.  **Frontend (NGINX):** Reverse proxy, Basic Auth, serves static files.
 3.  **Startup (`start.sh`):** Tunes network, fetches IP, activates venv, starts Waitress.
-4.  **GStreamer Pipeline:** `filesrc ! tsparse ! srtsink` with parameters.
+4.  **GStreamer Pipeline Structure:** The core streaming logic uses a GStreamer pipeline dynamically constructed similar to this template:
+    ```gst-pipeline
+    filesrc location="..." ! \
+    tsparse name="tsparse_..." set-timestamps=true alignment=7 smoothing-latency=20000 parse-private-sections=true ! \
+    srtsink name="srtsink_..." uri="srt://..." [SRT params like mode, latency, overhead, encryption, DVB settings] wait-for-connection=true
+    ```
+    The `smoothing-latency=20000` (20ms) on `tsparse` is specifically chosen to improve PCR timing stability for professional broadcast equipment.
 
 ## System Requirements
 

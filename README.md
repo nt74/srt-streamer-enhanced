@@ -4,7 +4,7 @@
 
 `srt-streamer-enhanced` is a professional solution for testing SRT (Secure Reliable Transport) listeners and callers. Built with Python, Flask, and the GStreamer multimedia framework, it provides a web interface to manage and monitor multiple SRT streams originating from pre-recorded Transport Stream (TS) files.
 
-The core functionality revolves around a carefully configured GStreamer pipeline (`filesrc ! tsparse ! srtsink`) designed for stable, DVB-compliant TS-over-SRT streaming, making it ideal for testing professional SRT IRDs and receivers (Ateme, Appear, Haivision, etc.). The web interface uses Bootstrap 5, jQuery, and Chart.js for a dynamic and informative user experience. Configuration recommendations derived from the Network Test feature are based on principles outlined in documents like the Haivision SRT Deployment Guide[cite: 1].
+The core functionality revolves around a carefully configured GStreamer pipeline (`filesrc ! tsparse ! srtsink`) designed for stable, DVB-compliant TS-over-SRT streaming, making it ideal for testing professional SRT IRDs and receivers (Ateme, Appear, Haivision, etc.). The web interface uses Bootstrap 5, jQuery, and Chart.js for a dynamic and informative user experience. Configuration recommendations derived from the Network Test feature are based on principles outlined in documents like the Haivision SRT Deployment Guide.
 
 ## Features
 
@@ -15,7 +15,7 @@ The core functionality revolves around a carefully configured GStreamer pipeline
     * Parses Transport Streams using `tsparse` with timestamping, 7-packet alignment, and **`smoothing-latency=20000` (20ms)** to reduce PCR jitter for professional receivers.
     * Transmits using `srtsink` configured with user-defined latency, overhead, encryption, and specific DVB/SRT parameters (large buffers, `tlpktdrop`, NAK reports, etc.).
 * **DVB Compliance Focus:** Applies specific SRT parameters (`dvb_config.py`) and `tsparse` settings suitable for DVB transport stream carriage.
-* **Integrated Network Testing:** Measures RTT/Loss using `ping`/`iperf3`, recommends SRT Latency/Overhead (based on SRT Guide principles [cite: 303, 348]), and allows applying settings to the stream form.
+* **Integrated Network Testing:** Measures RTT/Loss using `ping`/`iperf3`, recommends SRT Latency/Overhead (based on SRT Guide principles), and allows applying settings to the stream form.
 * **Real-time Monitoring & Statistics:** Dashboard with live status, detailed stream view with charts (Chart.js) for Bitrate/RTT/Loss history, packet counters, buffer levels, and debug info API.
 * **Media Management:** AJAX media browser modal lists `.ts` files; Media Info page uses `ffprobe`/`mediainfo`. Potential upload support.
 * **Dynamic Web Interface:** Built with Bootstrap 5, jQuery. Includes dashboard, caller page, network test page, stream details. AJAX updates for system info & streams. Theme switcher.
@@ -33,7 +33,9 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 
 1.  **Backend (`app/`):** Python/Flask app. `StreamManager` controls GStreamer. `NetworkTester` runs checks. `utils.py` provides system info. Logs to `/var/log/srt-streamer/srt_streamer.log`. Caches in `app/data/`.
 2.  **Frontend (NGINX):** Reverse proxy, Basic Auth, serves static files.
-3.  **Startup (`start.sh`):** Tunes network (`sysctl`), fetches IP, activates venv, starts Waitress.
+3.  **Service Management (Systemd):** Recommended startup uses two systemd units:
+    * `network-tuning.service`: Applies network `sysctl` optimizations at boot (runs `network-tuning.sh`).
+    * `srt-streamer.service`: Manages the main application process, activating the Python virtual environment and running the Waitress server via `wsgi.py`. It depends on `network-tuning.service`.
 4.  **GStreamer Pipeline Structure:** The core streaming logic uses a GStreamer pipeline dynamically constructed similar to this template:
     ```gst-pipeline
     filesrc location="..." ! \
@@ -47,7 +49,7 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 * **Operating System:** Debian/Ubuntu or Rocky Linux/RHEL (or equivalent distributions with GStreamer 1.0+ support).
 * **RAM:** Allocate approximately 1 GB of RAM per simultaneous SRT stream planned. For the maximum of 10 streams, at least 10 GB of RAM is recommended.
 * **CPU/GPU:** CPU usage is expected to be relatively low as the application primarily shuffles TS packets between file input and the SRT protocol (demuxing/remuxing) rather than performing computationally intensive transcoding or encoding. GPU is not utilized.
-* **Network:** A stable network connection with sufficient bandwidth (considering stream bitrate + SRT overhead) is required. Network tuning (via `start.sh` or system configuration) is recommended for optimal performance, especially for high-bitrate streams.
+* **Network:** A stable network connection with sufficient bandwidth (considering stream bitrate + SRT overhead) is required. Network tuning (via `network-tuning.sh` and systemd) is recommended for optimal performance, especially for high-bitrate streams.
 
 ## Target Environments
 
@@ -107,19 +109,21 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 
 4.  **Configure Application:**
     * **Media Files:** Place your `.ts` source files into `/opt/srt-streamer-enhanced/media/`.
-    * **Log/Data Directories:** Create directories and set permissions (adjust owner if not running service as root):
+    * **Log/Data Directories:** Create directories and set permissions (assuming service runs as root, based on current service file):
         ```bash
         sudo mkdir -p /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
-        sudo chown <service_user>:<service_group> /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
+        sudo chown root:root /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
+        # Adjust owner if you modify the systemd service to run as a different user
         ```
-        *(Replace `<service_user>:<service_group>` with appropriate values, e.g., `root:root`)*
     * **NGINX:**
         * Configure Nginx as a reverse proxy for `http://127.0.0.1:5000`.
         * Create a password file (e.g., `/etc/nginx/.htpasswd`) for Basic Authentication using `htpasswd`. **Set a strong password and change the example user `admin`.** Secure the file permissions.
             ```bash
             sudo htpasswd -c /etc/nginx/.htpasswd admin
             # Enter password
-            sudo chown www-data:www-data /etc/nginx/.htpasswd # Adjust for Nginx user
+            # Check Nginx user (e.g., www-data on Debian, nginx on RHEL)
+            # sudo ps aux | grep nginx
+            sudo chown www-data:www-data /etc/nginx/.htpasswd # Adjust user:group if needed
             sudo chmod 640 /etc/nginx/.htpasswd
             ```
         * Add/Enable the Nginx site configuration and test/restart Nginx.
@@ -127,43 +131,71 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
         ```bash
         openssl rand -hex 32
         ```
-        **Copy this key.** You will need it for the systemd service file.
-    * **Startup Script:** Make `start.sh` executable:
-        ```bash
-        sudo chmod +x /opt/srt-streamer-enhanced/start.sh
-        ```
+        **Copy this key.** You will need it for the systemd service file in the next step.
 
-5.  **Set Up Systemd Service (Recommended):**
-    * Create/Edit the service file `/etc/systemd/system/srt-streamer.service`.
+5.  **Set Up Systemd Services (Recommended):**
+    * **Network Tuning Script:** Ensure the network tuning script exists at `/opt/srt-streamer-enhanced/network-tuning.sh` (from the repository) and is executable:
+        ```bash
+        # Verify content first if needed
+        sudo chmod +x /opt/srt-streamer-enhanced/network-tuning.sh
+        ```
+    * **Network Tuning Service:** Create the service file `/etc/systemd/system/network-tuning.service`:
         ```ini
         [Unit]
-        Description=SRT Streamer Enhanced - DVB Compliant
-        After=network.target nginx.service
+        Description=Apply Network Settings for SRT Streamer Enhanced
+        After=network.target
+        Before=srt-streamer.service nginx.service
+        ConditionFileIsExecutable=/opt/srt-streamer-enhanced/network-tuning.sh
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        User=root
+        ExecStart=/opt/srt-streamer-enhanced/network-tuning.sh
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        # Intentionally empty - pulled in by srt-streamer.service Wants=
+        ```
+    * **Application Service:** Create/Edit the main service file `/etc/systemd/system/srt-streamer.service`:
+        ```ini
+        [Unit]
+        Description=SRT Streamer Enhanced - DVB Compliant App Server (Waitress)
+        After=network.target network-online.target network-tuning.service nginx.service
+        Wants=network-online.target network-tuning.service # Ensures tuning runs first
 
         [Service]
         Type=simple
-        User=root # Review if non-root needed
+        User=root # Review if non-root needed, ensure permissions align
+        Group=root
         WorkingDirectory=/opt/srt-streamer-enhanced
-        Environment="SECRET_KEY=paste_your_generated_secret_key_here"
-        # Environment="MEDIA_FOLDER=/srv/media/srt-sources"
-        ExecStart=/opt/srt-streamer-enhanced/start.sh
+        Environment="SECRET_KEY=paste_your_generated_secret_key_here" # <-- PASTE KEY HERE
+        Environment="HOST=127.0.0.1"
+        Environment="PORT=5000"
+        Environment="THREADS=8" # Adjust as needed
+        Environment="MEDIA_FOLDER=/opt/srt-streamer-enhanced/media"
+        Environment="FLASK_ENV=production"
+        ExecStart=/opt/venv/bin/python3 /opt/srt-streamer-enhanced/wsgi.py # Direct execution
         Restart=on-failure
-        RestartSec=5
+        RestartSec=5s
+        TimeoutStopSec=30s
+        KillMode=mixed
         StandardOutput=journal
         StandardError=journal
 
         [Install]
         WantedBy=multi-user.target
         ```
-    * **Paste your generated `SECRET_KEY`** into the `Environment=` line.
-    * Reload systemd, enable and start the service:
+    * **Paste your generated `SECRET_KEY`** into the `Environment=` line in `/etc/systemd/system/srt-streamer.service`.
+    * **Reload systemd, enable and start the *main* service:**
         ```bash
         sudo systemctl daemon-reload
-        sudo systemctl enable srt-streamer.service
+        sudo systemctl enable srt-streamer.service # Do NOT enable network-tuning.service directly
         sudo systemctl start srt-streamer.service
         ```
 
-6.  **Verify:** Check service status (`systemctl status`), logs (`journalctl`, app log file), and access the web UI via the Nginx address.
+6.  **Verify:** Check service status (`systemctl status srt-streamer.service network-tuning.service`), logs (`journalctl -u srt-streamer.service`, `/var/log/srt-streamer/srt_streamer.log`), and access the web UI via the Nginx address.
 
 ## Usage Workflow
 
@@ -176,16 +208,16 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 
 ## Configuration & Tuning Tips (from SRT Guide)
 
-* **SRT Latency:** Determines buffer size for jitter and retransmissions[cite: 290, 376]. Set based on RTT (e.g., 4x RTT [cite: 381]) and network stability. Higher value of sender/receiver setting is used[cite: 385]. Adjust based on buffer monitoring.
-* **Bandwidth Overhead:** Reserve extra bandwidth (%) for packet recovery[cite: 361]. Higher loss needs more overhead[cite: 349]. Ensure total bandwidth fits link capacity[cite: 306].
+* **SRT Latency:** Determines buffer size for jitter and retransmissions. Set based on RTT (e.g., 4x RTT) and network stability. Higher value of sender/receiver setting is used. Adjust based on buffer monitoring.
+* **Bandwidth Overhead:** Reserve extra bandwidth (%) for packet recovery. Higher loss needs more overhead. Ensure total bandwidth fits link capacity.
 * **Monitoring Buffers (Stream Details Page):**
-    * **Sender:** Consistent high Send Buffer Level often means bitrate too high or overhead too low[cite: 617, 472]. Occasional spikes might be handled by increasing Latency[cite: 473].
-    * **Receiver:** Frequent drops to zero suggest bitrate too high[cite: 470]. Occasional drops might need more Latency[cite: 471].
-* **Packet Loss:** Monitor Lost/Skipped packets. Increase Latency for slow/jitter-related increases[cite: 638]. Lower Bitrate or increase Overhead for large jumps/bursts[cite: 639].
+    * **Sender:** Consistent high Send Buffer Level often means bitrate too high or overhead too low. Occasional spikes might be handled by increasing Latency.
+    * **Receiver:** Frequent drops to zero suggest bitrate too high. Occasional drops might need more Latency.
+* **Packet Loss:** Monitor Lost/Skipped packets. Increase Latency for slow/jitter-related increases. Lower Bitrate or increase Overhead for large jumps/bursts.
 
 ## References
 
-* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf) [cite: 1]
+* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf)
 * [SRT Alliance](https://www.srtalliance.org/)
 * [SRT GitHub Repository](https://github.com/Haivision/srt)
 

@@ -1,40 +1,41 @@
 #!/bin/bash
-# Enhanced SRT Network optimization for DVB streaming with container support
+# /opt/srt-streamer-enhanced/network-tuning.sh
+# Apply Network Settings for SRT Streamer Enhanced
 
-echo "Applying SRT/DVB network optimizations..."
+echo "Applying SRT/DVB network optimizations..." | systemd-cat -p info -t network-tuning
 
-# Function to safely apply sysctl settings
+# Function to apply sysctl setting and log
 apply_sysctl() {
-    param=$1
-    value=$2
-    param_path="/proc/sys/${param//.//}"
-
-    if [ -f "$param_path" ]; then
-        sysctl -w "$param=$value" > /dev/null 2>&1
-        echo "✓ Set $param to $value"
+    local key="$1"
+    local value="$2"
+    if sysctl -w "${key}=${value}" &>/dev/null; then
+        echo "✓ Set ${key} to ${value}" | systemd-cat -p info -t network-tuning
     else
-        echo "- Skip $param (not available)"
+        # Check if the key exists at all
+        if sysctl -n "${key}" &>/dev/null; then
+             echo "WARN: Failed to set ${key} to ${value}, but key exists. Check permissions or value." | systemd-cat -p warning -t network-tuning
+        else
+             echo "- Skip ${key} (Not available in this kernel/environment)" | systemd-cat -p notice -t network-tuning
+        fi
     fi
 }
 
-# Network buffer sizes
-apply_sysctl "net.core.rmem_max" "26214400"
-apply_sysctl "net.core.wmem_max" "26214400"
-apply_sysctl "net.core.rmem_default" "4194304"
-apply_sysctl "net.core.wmem_default" "4194304"
+# Apply settings using the function
+apply_sysctl net.core.rmem_max 26214400
+apply_sysctl net.core.wmem_max 26214400
+apply_sysctl net.core.rmem_default 8388608
+apply_sysctl net.core.wmem_default 8388608
+apply_sysctl net.ipv4.udp_rmem_min 8192
+apply_sysctl net.ipv4.udp_wmem_min 8192
+apply_sysctl net.ipv4.tcp_window_scaling 1
+apply_sysctl net.ipv4.tcp_timestamps 1
+apply_sysctl net.ipv4.tcp_sack 1
+apply_sysctl net.ipv4.tcp_fastopen 3
+apply_sysctl vm.swappiness 10
 
-# UDP specific settings
-apply_sysctl "net.ipv4.udp_rmem_min" "8192"
-apply_sysctl "net.ipv4.udp_wmem_min" "8192"
+# Example: Add a small delay if needed for settings to fully apply (usually not necessary)
+# sleep 1
 
-# TCP optimizations (for web interface)
-apply_sysctl "net.ipv4.tcp_window_scaling" "1"
-apply_sysctl "net.ipv4.tcp_timestamps" "1"
-apply_sysctl "net.ipv4.tcp_sack" "1"
-apply_sysctl "net.ipv4.tcp_fastopen" "3"
+echo "Network tuning script finished." | systemd-cat -p info -t network-tuning
 
-# VM settings
-apply_sysctl "vm.swappiness" "10"
-
-echo "Network tuning completed with available parameters."
-echo "Note: Some kernel parameters may not be available in container environments."
+exit 0

@@ -1,26 +1,27 @@
-# Full content for app/forms.py
+# /opt/srt-streamer-enhanced/app/forms.py
+# Contains Flask-WTF form definitions for the SRT Streamer application.
 
 from flask_wtf import FlaskForm
 from wtforms import (
-    StringField, 
-    IntegerField, 
-    SelectField, 
-    PasswordField, # Kept in case used elsewhere, though StreamForm uses StringField now
-    BooleanField, 
+    StringField,
+    IntegerField,
+    SelectField,
+    PasswordField, # Kept in case used elsewhere
+    BooleanField, # Added for QoS
     FileField
 )
 from wtforms.validators import (
-    DataRequired, 
-    Length, 
-    NumberRange, 
-    Optional, 
+    DataRequired,
+    Length,
+    NumberRange, # Modified for Overhead
+    Optional,
     ValidationError
 )
 from wtforms.widgets import html_params, Input
 from markupsafe import Markup
 from flask_wtf.file import FileAllowed
 
-# --- Custom Widget (already present) ---
+# --- Custom Widget for Percentage Input ---
 class PercentageInput(Input):
     """
     Custom input widget that adds a percentage sign after the input field
@@ -31,22 +32,22 @@ class PercentageInput(Input):
         if 'required' not in kwargs and 'required' in getattr(field, 'flags', []):
             kwargs['required'] = True
         return Markup('<div class="input-group">'
-                     '<input %s>'
-                     '<span class="input-group-text">%%</span>'
-                     '</div>' % html_params(name=field.name, 
-                                          value=field._value(),
-                                          **kwargs))
+                        '<input %s>'
+                        '<span class="input-group-text">%%</span>'
+                        '</div>' % html_params(name=field.name,
+                                               value=field._value(),
+                                               **kwargs))
 
-# --- Existing StreamForm (Listener/Caller combined, modified validation) ---
-# Note: StreamForm already handles listener/caller selection. 
-# We can potentially keep using this form and adapt the route logic,
-# OR use the new CallerForm specifically for the /caller route. 
-# Let's keep StreamForm as it was for the index page, and add CallerForm for the new page.
+# --- Main StreamForm (Primarily for Listener on Index Page) ---
 class StreamForm(FlaskForm):
-    # Port selection as dropdown (10001-10010) - For Listener Mode
+    """
+    Form for configuring and starting SRT streams, primarily used for Listener mode
+    on the main dashboard. Includes common parameters and listener-specific ones.
+    """
+    # Port selection (Listener Mode)
     port = SelectField(
         'Port',
-        choices=[(str(port), str(port)) for port in range(10001, 10011)],  # 10001-10010
+        choices=[(str(port), str(port)) for port in range(10001, 10011)], # Ports 10001-10010
         default='10001',
         validators=[DataRequired()],
         render_kw={
@@ -54,7 +55,7 @@ class StreamForm(FlaskForm):
             'aria-describedby': 'portHelp'
         }
     )
-    
+
     # File path field
     file_path = StringField(
         'File Path',
@@ -65,7 +66,7 @@ class StreamForm(FlaskForm):
             'aria-describedby': 'fileHelp'
         }
     )
-    
+
     # Latency configuration
     latency = IntegerField(
         'Latency (ms)',
@@ -73,7 +74,7 @@ class StreamForm(FlaskForm):
             DataRequired(),
             NumberRange(min=20, max=8000, message="Latency must be between 20 and 8000 ms")
         ],
-        default=300,
+        default=300, # Default latency
         render_kw={
             'class': 'form-control',
             'min': '20',
@@ -81,27 +82,28 @@ class StreamForm(FlaskForm):
             'aria-describedby': 'latencyHelp'
         }
     )
-    
-    # Overhead bandwidth (updated range 10-66%)
+
+    # *** MODIFIED: Overhead bandwidth (updated range 1-99%) ***
     overhead_bandwidth = IntegerField(
         'Overhead Bandwidth',
         validators=[
             DataRequired(),
-            NumberRange(min=10, max=66, message="Overhead must be between 10% and 66%")
+            NumberRange(min=1, max=99, message="Overhead must be between 1% and 99%") # MODIFIED Range
         ],
-        default=25,
-        widget=PercentageInput(),
+        default=25, # Default overhead
+        widget=PercentageInput(), # Use custom widget
         render_kw={
             'class': 'form-control',
-            'min': '10',
-            'max': '66',
+            'min': '1',   # MODIFIED min
+            'max': '99',  # MODIFIED max
             'step': '1',
             'aria-describedby': 'overheadHelp'
         },
-        description="Extra bandwidth reserved for packet recovery (25-33% recommended)"
+        description="Extra bandwidth reserved for packet recovery (SRT Guide recommends 1-99%)"
     )
-    
-    # Mode selection (Listener/Caller)
+
+    # Mode selection (Listener/Caller) - Primarily for potential future use on this form,
+    # route logic enforces listener mode for this form's submission.
     mode = SelectField(
         'Mode',
         choices=[
@@ -114,12 +116,12 @@ class StreamForm(FlaskForm):
             'aria-describedby': 'modeHelp'
         }
     )
-    
-    # Target address (only shown in caller mode)
+
+    # Target address (Only relevant if mode=caller, primarily for validation consistency)
     target_address = StringField(
         'Target Address',
         validators=[
-            Optional(), 
+            Optional(),
             Length(max=255)
         ],
         render_kw={
@@ -128,7 +130,7 @@ class StreamForm(FlaskForm):
             'aria-describedby': 'targetHelp'
         }
     )
-    
+
     # Encryption selection
     encryption = SelectField(
         'Encryption',
@@ -137,14 +139,14 @@ class StreamForm(FlaskForm):
             ('aes-128', 'AES-128'),
             ('aes-256', 'AES-256')
         ],
-        default='none',
+        default='none', # Default to no encryption
         render_kw={
             'class': 'form-select',
             'aria-describedby': 'encryptionHelp'
         }
     )
-    
-    # Passphrase field - StringField to allow visibility
+
+    # Passphrase field
     passphrase = StringField(
         'Passphrase',
         validators=[
@@ -157,8 +159,18 @@ class StreamForm(FlaskForm):
             'aria-describedby': 'passphraseHelp'
         }
     )
-    
-    # DVB compliance toggle (kept as disabled True)
+
+    # *** NEW: QoS Field ***
+    qos = BooleanField(
+        'Enable QoS',
+        default=False, # Default to disabled
+        render_kw={
+            'class': 'form-check-input'
+        },
+        description="Enable Quality of Service flag (qos=true) for SRT URI"
+    )
+
+    # DVB compliance toggle (Mandatory, disabled)
     dvb_compliant = BooleanField(
         'DVB Compliant',
         default=True,
@@ -170,87 +182,102 @@ class StreamForm(FlaskForm):
         description="DVB compliance is mandatory for all streams"
     )
 
+    # Extended validation method
     def validate(self, extra_validators=None):
         """
-        Extended validation with custom rules
+        Extended validation with custom rules for encryption and caller mode requirements.
         """
         if not super().validate(extra_validators):
             return False
-        
+
         # Validate encryption requirements
         if self.encryption.data != 'none' and not self.passphrase.data:
             self.passphrase.errors.append('Passphrase is required when encryption is enabled')
             return False
-            
-        # Validate caller mode requirements
+
+        # Validate caller mode requirements (though this form primarily handles listener via routes)
         if self.mode.data == 'caller' and not self.target_address.data:
             self.target_address.errors.append('Target address is required in Caller mode')
             return False
-            
+
         # Validate target address format if provided
         if self.target_address.data:
             if not self._validate_target_address(self.target_address.data):
                 self.target_address.errors.append('Invalid target address format (IP or hostname)')
                 return False
-            
-        # Warnings for overhead bandwidth are fine, no need to return False
-        if self.overhead_bandwidth.data: # Check if data exists
-            if self.overhead_bandwidth.data < 15:
-                 # Consider adding a non-blocking warning if needed, but don't fail validation
-                 pass 
-            elif self.overhead_bandwidth.data > 50:
-                 # Consider adding a non-blocking warning
-                 pass
-            
-        return True
-    
-    def _validate_target_address(self, address):
-        """ Basic validation for IP or hostname """
-        if not address or len(address) > 255: return False
-        # Very basic checks, could be improved with regex
-        if any(c in address for c in ' \t\n\r'): return False 
+
+        # Optional: Add warnings based on the new overhead range if desired
+        # if self.overhead_bandwidth.data:
+        #    if self.overhead_bandwidth.data < 10:
+        #        pass # Add warning (e.g., flash message) about potentially low overhead
+        #    elif self.overhead_bandwidth.data > 80:
+        #        pass # Add warning about potentially excessive overhead
+
         return True
 
-# --- NEW CallerForm ---
+    def _validate_target_address(self, address):
+        """ Basic validation for IP address or hostname format. """
+        if not address or len(address) > 255: return False
+        # Very basic checks, could be improved with regex for IP/hostname structure
+        if any(c in address for c in ' \t\n\r'): return False
+        return True
+
+# --- Dedicated CallerForm (Used on /caller page) ---
 class CallerForm(FlaskForm):
+    """
+    Form specifically for configuring and starting SRT streams in Caller mode.
+    """
     target_address = StringField(
-        'Target Host/IP', 
+        'Target Host/IP',
         validators=[DataRequired(), Length(max=255)],
         render_kw={'placeholder': 'e.g., 192.168.1.100 or ird.example.com', 'class': 'form-control'}
     )
     target_port = IntegerField(
-        'Target Port', 
+        'Target Port',
         validators=[DataRequired(), NumberRange(min=1, max=65535)],
-        default=10001, 
+        default=10001, # Default target port
         render_kw={'class': 'form-control', 'min': '1', 'max': '65535'}
     )
+
+    # File path (Same as StreamForm)
     file_path = StringField(
         'File Path',
         validators=[DataRequired()],
         render_kw={
             'placeholder': 'Select media file',
             'class': 'form-control',
-            'aria-describedby': 'fileHelpCaller' 
+            'aria-describedby': 'fileHelpCaller'
         }
     )
+
+    # Latency (Same as StreamForm)
     latency = IntegerField(
         'Latency (ms)',
         validators=[DataRequired(), NumberRange(min=20, max=8000)],
-        default=300,
+        default=300, # Default latency
         render_kw={'class': 'form-control', 'min': '20', 'max': '8000'}
     )
+
+    # *** MODIFIED: Overhead bandwidth (updated range 1-99%) ***
     overhead_bandwidth = IntegerField(
         'Overhead Bandwidth',
-        validators=[DataRequired(), NumberRange(min=10, max=66)],
-        default=25,
-        widget=PercentageInput(), 
-        render_kw={'class': 'form-control', 'min': '10', 'max': '66', 'step': '1'},
-        description="Extra bandwidth for packet recovery (25-33% recommended)"
+        validators=[DataRequired(), NumberRange(min=1, max=99)], # MODIFIED Range
+        default=25, # Default overhead
+        widget=PercentageInput(), # Use custom widget
+        render_kw={
+            'class': 'form-control',
+            'min': '1',   # MODIFIED min
+            'max': '99',  # MODIFIED max
+            'step': '1'
+        },
+        description="Extra bandwidth for packet recovery (SRT Guide recommends 1-99%)"
     )
+
+    # Encryption (Same as StreamForm)
     encryption = SelectField(
         'Encryption',
         choices=[('none', 'None'), ('aes-128', 'AES-128'), ('aes-256', 'AES-256')],
-        default='none',
+        default='none', # Default to no encryption
         render_kw={'class': 'form-select'}
     )
     passphrase = StringField(
@@ -258,48 +285,69 @@ class CallerForm(FlaskForm):
         validators=[Optional(), Length(min=10, max=128)],
         render_kw={'placeholder': 'Required if encryption enabled', 'class': 'form-control'}
     )
-    
-    # DVB compliance hidden or not shown, assumed True based on StreamForm
-    # dvb_compliant = BooleanField('DVB Compliant', default=True) 
 
+    # *** NEW: QoS Field ***
+    qos = BooleanField(
+        'Enable QoS',
+        default=False, # Default to disabled
+        render_kw={
+            'class': 'form-check-input'
+        },
+        description="Enable Quality of Service flag (qos=true) for SRT URI"
+    )
+
+    # DVB compliance is assumed True for all streams, not shown as a user option here.
+    # dvb_compliant = BooleanField('DVB Compliant', default=True)
+
+    # Extended validation method for caller specifics
     def validate(self, extra_validators=None):
+        """
+        Extended validation ensuring encryption passphrase and target address format are correct.
+        """
         if not super().validate(extra_validators):
             return False
+
+        # Validate encryption requirements
         if self.encryption.data != 'none' and not self.passphrase.data:
-            self.passphrase.errors.append('Passphrase is required for encryption.')
+            self.passphrase.errors.append('Passphrase is required when encryption is enabled.')
             return False
-        # Add more validation if needed (e.g., target address format)
+
+        # Validate target address format (already done in field validator, but double-check here)
         if not self._validate_target_address(self.target_address.data):
-             self.target_address.errors.append('Invalid target address format (IP or hostname)')
-             return False
+            self.target_address.errors.append('Invalid target address format (IP or hostname).')
+            return False
+
+        # Optional: Add overhead warnings specific to caller mode if needed
+
         return True
 
     def _validate_target_address(self, address):
-        """ Basic validation for IP or hostname """
+        """ Basic validation for IP address or hostname format. """
         if not address or len(address) > 255: return False
         # Very basic checks, could be improved with regex
-        if any(c in address for c in ' \t\n\r'): return False 
+        if any(c in address for c in ' \t\n\r'): return False
         return True
 
-# --- Other Existing Forms (ensure they are still here) ---
+# --- Other Existing Forms (Keep these as they are) ---
+
 class NetworkTestForm(FlaskForm):
     """
-    Form for network testing configuration
+    Form for network testing configuration using iperf3 (via network_test.py).
     """
     target = StringField(
         'Target Server',
-        validators=[Optional()],
+        validators=[Optional()], # Optional, defaults might be used
         render_kw={
             'placeholder': 'Leave blank for automatic selection',
             'class': 'form-control'
         }
     )
-    
+
     duration = IntegerField(
         'Test Duration (seconds)',
         validators=[
             DataRequired(),
-            NumberRange(min=3, max=10)
+            NumberRange(min=3, max=10) # Keep duration short for web UI
         ],
         default=5,
         render_kw={
@@ -308,7 +356,7 @@ class NetworkTestForm(FlaskForm):
             'max': '10'
         }
     )
-    
+
     bitrate = SelectField(
         'Test Bitrate',
         choices=[
@@ -317,7 +365,7 @@ class NetworkTestForm(FlaskForm):
             ('20M', '20 Mbps'),
             ('50M', '50 Mbps')
         ],
-        default='10M',
+        default='10M', # Default test bitrate
         render_kw={
             'class': 'form-select'
         }
@@ -325,20 +373,20 @@ class NetworkTestForm(FlaskForm):
 
 class MediaUploadForm(FlaskForm):
     """
-    Form for media file uploads
+    Form for uploading media files (.ts format only).
     """
     media_file = FileField(
         'Media File',
         validators=[
             DataRequired(),
-            FileAllowed(['ts'], 'Only TS files are supported')
+            FileAllowed(['ts'], 'Only TS files (.ts) are supported')
         ],
         render_kw={
             'class': 'form-control',
-            'accept': '.ts'
+            'accept': '.ts' # Hint for browser file picker
         }
     )
-    
+
     description = StringField(
         'Description',
         validators=[Optional(), Length(max=255)],
@@ -350,13 +398,14 @@ class MediaUploadForm(FlaskForm):
 
 class SettingsForm(FlaskForm):
     """
-    Form for system settings
+    Form for potential future system settings (e.g., max streams, logging).
+    (Currently unused in routes, but defined here for structure)
     """
     max_streams = IntegerField(
         'Maximum Concurrent Streams',
         validators=[
             DataRequired(),
-            NumberRange(min=1, max=10)
+            NumberRange(min=1, max=10) # Example range
         ],
         default=5,
         render_kw={
@@ -365,7 +414,7 @@ class SettingsForm(FlaskForm):
             'max': '10'
         }
     )
-    
+
     auto_restart = BooleanField(
         'Auto-restart Failed Streams',
         default=True,
@@ -373,7 +422,7 @@ class SettingsForm(FlaskForm):
             'class': 'form-check-input'
         }
     )
-    
+
     log_level = SelectField(
         'Logging Level',
         choices=[

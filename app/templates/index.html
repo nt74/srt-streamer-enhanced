@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCR SRT Streamer</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
+    <title>MCR SRT Streamer - Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css" integrity="sha512-MV7K8+y+gLIBoVD59lQIYicR65iaqukzvf/nwasF0nqhPay5w/9lJmVM2hMDcnK1OnMGCdVK+iQrJ7lzPJQd1w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
     <style>
+        /* Custom styles from original prompt */
         .overhead-tooltip {
             --bs-tooltip-bg: var(--bs-primary);
         }
@@ -21,8 +22,18 @@
             justify-content: center;
         }
         /* Style for caller cards */
-        .card-header.bg-warning { 
-             color: #000 !important; /* Ensure dark text on warning background */
+        .card-header.bg-warning {
+            color: #000 !important; /* Ensure dark text on warning background */
+        }
+        /* Small spinner for refresh indicator */
+        #refresh-indicator {
+            width: 0.8rem;
+            height: 0.8rem;
+            border-width: 0.15em;
+        }
+        /* Ensure icons in tables align nicely */
+        .table td i.fa-fw {
+             margin-right: 5px;
         }
     </style>
 </head>
@@ -34,29 +45,29 @@
                 <a href="{{ url_for('network_test_page') }}" class="btn btn-info">
                     <i class="fas fa-network-wired"></i> Network Test
                 </a>
-                 <a href="{{ url_for('caller_page') }}" class="btn btn-warning ms-2"> 
+                 <a href="{{ url_for('caller_page') }}" class="btn btn-warning ms-2">
                     <i class="fas fa-phone-alt"></i> Start Caller
                 </a>
-            </div>
+                </div>
         </div>
-        
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
         {% if error %}
-             <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
                 {{ error }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         {% endif %}
-        
+
         <div class="row">
             <div class="col-lg-6">
                 <div class="card mb-4">
@@ -64,9 +75,9 @@
                         <i class="fas fa-play-circle"></i> Start New Listener Stream
                     </div>
                     <div class="card-body">
-                        <form method="POST" action="{{ url_for('start_listener_stream') }}" id="stream-form"> 
-                            {{ form.csrf_token }}
-                            
+                        <form method="POST" action="{{ url_for('start_listener_stream') }}" id="stream-form">
+                            {{ form.csrf_token }} {# CSRF protection token #}
+
                             <div class="mb-3">
                                 {{ form.file_path.label(class="form-label") }}
                                 <div class="input-group">
@@ -75,19 +86,19 @@
                                         <i class="fas fa-folder-open"></i> Browse
                                     </button>
                                 </div>
-                                <div id="fileHelp" class="form-text">Select a .ts file from your media library.</div>
+                                <div id="fileHelp" class="form-text">Select a .ts file from the media library.</div>
                                 {% if form.file_path.errors %}
                                 <div class="invalid-feedback d-block">
                                     {% for error in form.file_path.errors %}{{ error }}{% endfor %}
                                 </div>
                                 {% endif %}
                             </div>
-                            
+
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    {{ form.port.label(class="form-label") }} (Listener)
+                                    {{ form.port.label(class="form-label") }} (Listener Port)
                                     {{ form.port(class="form-select" + (' is-invalid' if form.port.errors else '')) }}
-                                    <div id="portHelp" class="form-text">Listen Port: 10001-10010</div>
+                                    <div id="portHelp" class="form-text">Listen Port Range: 10001-10010</div>
                                     {% if form.port.errors %}
                                     <div class="invalid-feedback d-block">
                                         {% for error in form.port.errors %}{{ error }}{% endfor %}
@@ -100,35 +111,38 @@
                                         {{ form.latency(class="form-control" + (' is-invalid' if form.latency.errors else '')) }}
                                         <span class="input-group-text">ms</span>
                                     </div>
-                                    <div id="latencyHelp" class="form-text">Recommended: 120-400ms</div>
-                                     {% if form.latency.errors %}
+                                    <div id="latencyHelp" class="form-text">SRT Latency buffer (e.g., RTT * 4). Range: 20-8000ms.</div>
+                                    {% if form.latency.errors %}
                                     <div class="invalid-feedback d-block">
                                         {% for error in form.latency.errors %}{{ error }}{% endfor %}
                                     </div>
                                     {% endif %}
                                 </div>
                             </div>
-                            
+
                             <div class="row mb-3">
-                                <div class="col-md-12">
+                                <div class="col-md-12"> {# Changed to full width for better layout #}
                                     <div class="d-flex justify-content-between align-items-center">
                                         {{ form.overhead_bandwidth.label(class="form-label") }}
-                                         <i class="fas fa-info-circle text-primary parameter-help" 
-                                            data-bs-toggle="tooltip" data-bs-placement="top"
-                                            title="{{ form.overhead_bandwidth.description }}"></i>
+                                        <i class="fas fa-info-circle text-primary parameter-help"
+                                           data-bs-toggle="tooltip" data-bs-placement="top"
+                                           data-bs-custom-class="overhead-tooltip" {# Optional custom tooltip style #}
+                                           title="{{ form.overhead_bandwidth.description }}"></i> {# Tooltip uses description from form #}
                                     </div>
-                                     {{ form.overhead_bandwidth(class="form-control" + (' is-invalid' if form.overhead_bandwidth.errors else '')) }}
-                                     <div id="overheadHelp" class="form-text">Range: 10-66%</div>
-                                     {% if form.overhead_bandwidth.errors %}
+                                    {# Render the field using the custom PercentageInput widget #}
+                                    {{ form.overhead_bandwidth(class="form-control" + (' is-invalid' if form.overhead_bandwidth.errors else '')) }}
+                                    <div id="overheadHelp" class="form-text">Bandwidth reserve for retransmissions. Range: 1-99%. Default: 25%.</div>
+                                    {% if form.overhead_bandwidth.errors %}
                                     <div class="invalid-feedback d-block">
                                         {% for error in form.overhead_bandwidth.errors %}{{ error }}{% endfor %}
                                     </div>
                                     {% endif %}
                                 </div>
                             </div>
-                           
+
+                            {# Hidden field to ensure mode is 'listener' for this form submission #}
                             <input type="hidden" name="mode" value="listener">
-                            
+
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     {{ form.encryption.label(class="form-label") }}
@@ -139,9 +153,9 @@
                                     </div>
                                     {% endif %}
                                 </div>
-                                <div class="col-md-6 listener-encryption-options" style="display: none;">
+                                <div class="col-md-6 listener-encryption-options" style="display: none;"> {# JS toggles visibility #}
                                     {{ form.passphrase.label(class="form-label") }}
-                                    {{ form.passphrase(class="form-control" + (' is-invalid' if form.passphrase.errors else ''), placeholder="Min 10 characters") }}
+                                    {{ form.passphrase(class="form-control" + (' is-invalid' if form.passphrase.errors else ''), placeholder="Min 10, Max 79 characters") }}
                                     {% if form.passphrase.errors %}
                                     <div class="invalid-feedback d-block">
                                         {% for error in form.passphrase.errors %}{{ error }}{% endfor %}
@@ -149,25 +163,48 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            
-                            <div class="form-check mb-3">
-                                {{ form.dvb_compliant(class="form-check-input") }}
-                                {{ form.dvb_compliant.label(class="form-check-label") }}
-                                <i class="fas fa-info-circle text-info ms-1" 
-                                   data-bs-toggle="tooltip" 
-                                   title="DVB compliance settings applied via configuration"></i>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                     <div class="form-check">
+                                        {{ form.dvb_compliant(class="form-check-input") }}
+                                        {{ form.dvb_compliant.label(class="form-check-label") }}
+                                        <i class="fas fa-info-circle text-info ms-1"
+                                           data-bs-toggle="tooltip"
+                                           title="DVB compliance settings applied via configuration (mandatory)"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    {# *** NEW: QoS Checkbox *** #}
+                                    <div class="form-check">
+                                        {{ form.qos(class="form-check-input" + (' is-invalid' if form.qos.errors else '')) }}
+                                        {{ form.qos.label(class="form-check-label") }}
+                                        <i class="fas fa-info-circle text-primary ms-1"
+                                           data-bs-toggle="tooltip" data-bs-placement="top"
+                                           title="{{ form.qos.description }}"></i> {# Tooltip uses description from form #}
+                                        {% if form.qos.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            {% for error in form.qos.errors %}{{ error }}{% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {# *** END QoS Checkbox *** #}
+                                </div>
                             </div>
-                            
+
                             <div class="d-flex">
                                 <button type="submit" class="btn btn-primary me-2">
                                     <i class="fas fa-play"></i> Start Listener
                                 </button>
-                                </div>
+                                {# Optional Reset Button
+                                <button type="reset" class="btn btn-outline-secondary">Reset Form</button>
+                                #}
+                            </div>
                         </form>
-                    </div>
-                </div>
-            </div>
-            
+                    </div> {# End card-body #}
+                </div> {# End card #}
+            </div> {# End col-lg-6 #}
+
             <div class="col-lg-6">
                 <div class="card mb-4" id="system-info-card">
                     <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
@@ -175,85 +212,92 @@
                         <small class="text-white-50" id="sys-refresh-time" style="font-size: 0.8rem;"></small>
                     </div>
                     <div class="card-body">
+                        {# Using table for structured layout #}
                         <table class="table table-sm table-borderless mb-0"> <tbody>
-                                <tr>
-                                    <td width="130"><i class="fas fa-microchip fa-fw"></i> CPU</td> <td class="align-middle">
-                                        <div class="d-flex align-items-center">
-                                            <div class="progress flex-grow-1 me-2" style="height: 12px;">
-                                                <div class="progress-bar" id="cpu-bar" role="progressbar" style="width: {{ system_info.cpu_usage }}%;" aria-valuenow="{{ system_info.cpu_usage }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                            </div>
-                                            <span class="fw-bold" id="cpu-value">{{ system_info.cpu_usage }}%</span>
+                            <tr>
+                                <td width="130"><i class="fas fa-microchip fa-fw"></i> CPU Usage</td> <td class="align-middle">
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 12px;">
+                                            <div class="progress-bar" id="cpu-bar" role="progressbar" style="width: {{ system_info.cpu_usage }}%;" aria-valuenow="{{ system_info.cpu_usage }}" aria-valuemin="0" aria-valuemax="100"></div>
                                         </div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-memory fa-fw"></i> Memory</td>
-                                    <td class="align-middle">
-                                        <div class="d-flex align-items-center">
-                                            <div class="progress flex-grow-1 me-2" style="height: 12px;">
-                                                <div class="progress-bar" id="memory-bar" role="progressbar" style="width: {{ system_info.memory_percent }}%;" aria-valuenow="{{ system_info.memory_percent }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                            </div>
-                                            <span class="fw-bold" id="memory-value">{{ system_info.memory_percent }}%</span>
+                                        <span class="fw-bold" id="cpu-value">{{ system_info.cpu_usage }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><i class="fas fa-memory fa-fw"></i> Memory Usage</td>
+                                <td class="align-middle">
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 12px;">
+                                            <div class="progress-bar" id="memory-bar" role="progressbar" style="width: {{ system_info.memory_percent }}%;" aria-valuenow="{{ system_info.memory_percent }}" aria-valuemin="0" aria-valuemax="100"></div>
                                         </div>
-                                        <small class="text-muted d-block" id="memory-details">{{ system_info.memory_used }} / {{ system_info.memory_total }}</small> </td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-hdd fa-fw"></i> Disk</td>
-                                    <td class="align-middle">
-                                        <div class="d-flex align-items-center">
-                                            <div class="progress flex-grow-1 me-2" style="height: 12px;">
-                                                <div class="progress-bar" id="disk-bar" role="progressbar" style="width: {{ system_info.disk_percent }}%;" aria-valuenow="{{ system_info.disk_percent }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                            </div>
-                                            <span class="fw-bold" id="disk-value">{{ system_info.disk_percent }}%</span>
+                                        <span class="fw-bold" id="memory-value">{{ system_info.memory_percent }}%</span>
+                                    </div>
+                                    <small class="text-muted d-block" id="memory-details">{{ system_info.memory_used }} / {{ system_info.memory_total }}</small>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><i class="fas fa-hdd fa-fw"></i> Disk Usage</td>
+                                <td class="align-middle">
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 12px;">
+                                            <div class="progress-bar" id="disk-bar" role="progressbar" style="width: {{ system_info.disk_percent }}%;" aria-valuenow="{{ system_info.disk_percent }}" aria-valuemin="0" aria-valuemax="100"></div>
                                         </div>
-                                        <small class="text-muted d-block" id="disk-details">{{ system_info.disk_used }} / {{ system_info.disk_total }}</small> </td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-globe fa-fw"></i> External IP</td>
-                                    <td id="external-ip">{{ system_info.external_ip }}</td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-clock fa-fw"></i> UTC Time</td>
-                                    <td id="utc-time">{{ system_info.utc_time }}</td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-user fa-fw"></i> User</td> <td id="current-user">{{ system_info.current_user }}</td>
-                                </tr>
-                                <tr>
-                                    <td><i class="fas fa-hourglass-half fa-fw"></i> Uptime</td>
-                                    <td id="uptime">{{ system_info.uptime }}</td>
-                                </tr>
-                           </tbody>
+                                        <span class="fw-bold" id="disk-value">{{ system_info.disk_percent }}%</span>
+                                    </div>
+                                    <small class="text-muted d-block" id="disk-details">{{ system_info.disk_used }} / {{ system_info.disk_total }} (Root)</small> {# Specify mount point if needed #}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><i class="fas fa-globe fa-fw"></i> External IP</td>
+                                <td id="external-ip">{{ system_info.external_ip }}</td>
+                            </tr>
+                            <tr>
+                                <td><i class="fas fa-clock fa-fw"></i> UTC Time</td>
+                                <td id="utc-time">{{ system_info.utc_time }}</td>
+                            </tr>
+                            <tr>
+                                <td><i class="fas fa-user fa-fw"></i> Running User</td> <td id="current-user">{{ system_info.current_user }}</td>
+                            </tr>
+                            <tr>
+                                <td><i class="fas fa-hourglass-half fa-fw"></i> System Uptime</td>
+                                <td id="uptime">{{ system_info.uptime }}</td>
+                            </tr>
+                         </tbody>
                         </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
+                    </div> {# End card-body #}
+                </div> {# End card #}
+            </div> {# End col-lg-6 #}
+        </div> {# End row #}
+
         <h2 class="mb-3">
-            <i class="fas fa-broadcast-tower"></i> Active Streams 
-            <small class="text-muted fs-6">(Auto-refreshes)</small> <span id="refresh-indicator" class="spinner-border spinner-border-sm text-primary ms-2 d-none" role="status"></span>
+            <i class="fas fa-broadcast-tower"></i> Active Streams
+            <small class="text-muted fs-6">(Auto-refreshes)</small>
+            <span id="refresh-indicator" class="spinner-border spinner-border-sm text-primary ms-2 d-none" role="status" aria-hidden="true"></span>
         </h2>
-        
+
         <div class="row" id="active-streams-container">
+            {# Initial state message, will be replaced by JavaScript #}
             {% if not active_streams %}
             <div class="col-12">
-                <div class="alert alert-secondary"> <i class="fas fa-info-circle"></i> No active streams. Start a Listener or Caller stream using the forms.
+                <div class="alert alert-secondary"> <i class="fas fa-info-circle"></i> No active streams. Start a Listener or Caller stream using the forms above.
                 </div>
             </div>
             {% endif %}
+            {# JavaScript will populate this section #}
         </div>
 
         <footer class="mt-5 mb-3 text-center text-muted">
             <hr>
-            <p>&copy; 2025 Nikos Toutountzoglou, Sveriges Television AB.</p>
+            <p>&copy; {{ current_year or 2025 }} Nikos Toutountzoglou, Sveriges Television AB.</p> {# Use dynamic year if possible #}
         </footer>
-    </div>
+    </div> {# End container #}
 
     <div class="modal fade" id="mediaBrowserModal" tabindex="-1" aria-labelledby="mediaBrowserModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable"> {# Added scrollable #}
             <div class="modal-content">
-                <div class="modal-header bg-secondary text-white"> <h5 class="modal-title" id="mediaBrowserModalLabel">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title" id="mediaBrowserModalLabel">
                         <i class="fas fa-folder-open"></i> Select Media File
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -262,9 +306,16 @@
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6>Available Media Files (.ts)</h6>
                         <button id="refresh-media" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-sync"></i> Refresh
+                            <i class="fas fa-sync"></i> Refresh List
                         </button>
                     </div>
+                    <div id="media-loading" class="text-center" style="display: none;">
+                        <div class="spinner-border text-secondary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading media files...</p>
+                    </div>
+                    <div id="media-error" class="alert alert-danger" style="display: none;"></div>
                     <div class="table-responsive">
                         <table class="table table-hover" id="media-files">
                             <thead>
@@ -275,85 +326,79 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                </tbody>
+                                {# JavaScript will populate this #}
+                            </tbody>
                         </table>
                     </div>
-                    <div id="media-loading" class="text-center" style="display: none;">
-                        <div class="spinner-border text-secondary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p>Loading media files...</p>
-                    </div>
-                    <div id="media-error" class="alert alert-danger" style="display: none;"></div>
-                </div>
+                </div> {# End modal-body #}
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
-            </div>
-        </div>
-    </div>
+            </div> {# End modal-content #}
+        </div> {# End modal-dialog #}
+    </div> {# End modal #}
 
     <script>
         $(document).ready(function() {
-            // Initialize tooltips
+            // Initialize Bootstrap tooltips
             const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
             const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl)
             })
 
             // --- Listener Form Specific Logic ---
-            // Toggle listener encryption options
+            // Toggle listener encryption passphrase field visibility
             $('#encryption').change(function() { // Assuming 'encryption' is the ID for the listener form's select
                 if ($(this).val() === 'none') {
                     $('.listener-encryption-options').hide();
                 } else {
                     $('.listener-encryption-options').show();
                 }
-            }).trigger('change');
-            
-            // --- Media Browser Logic (Shared) ---
+            }).trigger('change'); // Trigger on page load to set initial state
+
+            // --- Media Browser Logic (Shared - triggered by Listener form on this page) ---
             let activeFilePathInput = null; // Store which input triggered the browser
 
-            // Trigger for Listener form
+            // Trigger for Listener form's Browse button
             $('#browse-media').click(function() {
-                activeFilePathInput = $('#file_path'); // ID of listener form input
-                loadMediaFiles();
-                $('#mediaBrowserModal').modal('show');
+                activeFilePathInput = $('#file_path'); // ID of listener form file input
+                loadMediaFiles(); // Load files into the modal
+                $('#mediaBrowserModal').modal('show'); // Show the modal
             });
 
-            // Trigger for Caller form (if exists on this page, generally on caller.html)
-            // This script is for index.html, so caller browse button won't be here.
-            // We assume the modal HTML is here and reused.
-
+            // Refresh button inside the modal
             $('#refresh-media').click(loadMediaFiles);
-            
+
+            // Function to load media files into the modal
             function loadMediaFiles() {
                 const targetTbody = $('#media-files tbody'); // Target the modal table body
-                targetTbody.empty();
-                $('#media-loading').show();
-                $('#media-error').hide();
-                
+                targetTbody.empty(); // Clear previous list
+                $('#media-loading').show(); // Show loading indicator
+                $('#media-error').hide(); // Hide previous errors
+
                 $.ajax({
-                    url: '/media',
+                    url: '/media', // API endpoint to list media files
                     type: 'GET',
                     dataType: 'json',
                     success: function(data) {
-                        $('#media-loading').hide();
-                        
+                        $('#media-loading').hide(); // Hide loading indicator
+
                         if (!data || data.length === 0) {
-                            targetTbody.append('<tr><td colspan="3" class="text-center text-muted">No .ts media files found</td></tr>');
+                            targetTbody.append('<tr><td colspan="3" class="text-center text-muted">No .ts media files found in media directory.</td></tr>');
                             return;
                         }
-                        
+
+                        // Populate table rows
                         data.forEach(function(file) {
                             const row = `
                                 <tr>
-                                    <td class="text-break">${file.name}</td> <td>${formatBytes(file.size)}</td>
+                                    <td class="text-break">${file.name}</td>
+                                    <td>${formatBytes(file.size)}</td>
                                     <td>
                                         <button class="btn btn-sm btn-primary select-media" data-file="${file.name}">
                                             <i class="fas fa-check"></i> Select
                                         </button>
-                                        <a href="/media_info/${encodeURIComponent(file.name)}" target="_blank" class="btn btn-sm btn-info">
+                                        <a href="/media_info/${encodeURIComponent(file.name)}" target="_blank" class="btn btn-sm btn-info ms-1" title="View File Info">
                                             <i class="fas fa-info-circle"></i> Info
                                         </a>
                                     </td>
@@ -361,14 +406,14 @@
                             `;
                             targetTbody.append(row);
                         });
-                        
-                        // Attach click handlers (needs delegation if rows added dynamically)
+
+                        // Attach click handlers to the 'Select' buttons using event delegation
                         targetTbody.off('click', '.select-media').on('click', '.select-media', function() {
                             const fileName = $(this).data('file');
                             if (activeFilePathInput) {
-                                activeFilePathInput.val(fileName); // Update the correct input field
+                                activeFilePathInput.val(fileName); // Update the correct form input field
                             }
-                            $('#mediaBrowserModal').modal('hide');
+                            $('#mediaBrowserModal').modal('hide'); // Close the modal
                         });
                     },
                     error: function(xhr, status, error) {
@@ -377,167 +422,177 @@
                     }
                 });
             }
-            
-            function formatBytes(bytes, decimals = 2) {
-                if (bytes === 0 || !bytes) return '0 Bytes';
-                const k = 1024;
-                const dm = decimals < 0 ? 0 : decimals;
-                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-            }
-            
+
             // --- System Info Update Logic ---
             function updateSystemInfo() {
                 $.getJSON('/system_info', function(data) {
                     if (!data) return; // Handle potential empty response
                     const now = new Date();
-                    $('#sys-refresh-time').text('Updated: ' + 
-                        now.getHours().toString().padStart(2, '0') + ':' + 
-                        now.getMinutes().toString().padStart(2, '0') + ':' + 
-                        now.getSeconds().toString().padStart(2, '0')
-                    );
-                    
-                    $('#cpu-value').text((data.cpu_usage || 0) + '%');
+                    // Format time as HH:MM:SS
+                    const timeString = now.getHours().toString().padStart(2, '0') + ':' +
+                                       now.getMinutes().toString().padStart(2, '0') + ':' +
+                                       now.getSeconds().toString().padStart(2, '0');
+                    $('#sys-refresh-time').text('Updated: ' + timeString);
+
+                    // Update CPU
+                    $('#cpu-value').text((data.cpu_usage || 0).toFixed(1) + '%');
                     $('#cpu-bar').css('width', (data.cpu_usage || 0) + '%').attr('aria-valuenow', data.cpu_usage || 0);
-                    
-                    $('#memory-value').text((data.memory_percent || 0) + '%');
+
+                    // Update Memory
+                    $('#memory-value').text((data.memory_percent || 0).toFixed(1) + '%');
                     $('#memory-bar').css('width', (data.memory_percent || 0) + '%').attr('aria-valuenow', data.memory_percent || 0);
                     $('#memory-details').text((data.memory_used || 'N/A') + ' / ' + (data.memory_total || 'N/A'));
-                    
-                    $('#disk-value').text((data.disk_percent || 0) + '%');
+
+                    // Update Disk
+                    $('#disk-value').text((data.disk_percent || 0).toFixed(1) + '%');
                     $('#disk-bar').css('width', (data.disk_percent || 0) + '%').attr('aria-valuenow', data.disk_percent || 0);
-                    $('#disk-details').text((data.disk_used || 'N/A') + ' / ' + (data.disk_total || 'N/A'));
-                    
+                    $('#disk-details').text((data.disk_used || 'N/A') + ' / ' + (data.disk_total || 'N/A') + ' (Root)');
+
+                    // Update other info
                     $('#external-ip').text(data.external_ip || 'unknown');
                     $('#utc-time').text(data.utc_time || 'N/A');
                     $('#current-user').text(data.current_user || 'N/A');
                     $('#uptime').text(data.uptime || 'N/A');
+
                 }).fail(function(xhr, status, error) {
                      console.error("Failed to fetch system info:", status, error);
+                     // Optionally display an error indicator on the system info card
                 });
             }
-            
-            // --- Active Streams Update Logic (Handles Both Listener and Caller) ---
+
+            // --- Active Streams Update Logic (Handles Both Listener and Caller Cards) ---
             function updateActiveStreams() {
-                $('#refresh-indicator').removeClass('d-none');
-                
+                $('#refresh-indicator').removeClass('d-none'); // Show spinner
+
                 $.getJSON('/get_active_streams', function(streams) {
                     const container = $('#active-streams-container');
                     container.empty(); // Clear and rebuild
-                    
-                    if (streams && Object.keys(streams).length === 0) {
+
+                    if (!streams || Object.keys(streams).length === 0) {
                         container.html(`
                             <div class="col-12">
                                 <div class="alert alert-secondary">
-                                    <i class="fas fa-info-circle"></i> No active streams.
+                                    <i class="fas fa-info-circle"></i> No active streams detected.
                                 </div>
                             </div>
                         `);
                         return;
                     }
-                    
-                    // Sort keys numerically if needed (might be strings from backend)
+
+                    // Sort keys numerically (ports/target_ports)
                     const sortedKeys = Object.keys(streams).sort((a, b) => parseInt(a) - parseInt(b));
 
                     for (const key of sortedKeys) {
                         const stream = streams[key];
                         if (!stream) continue; // Skip if stream data is invalid
 
+                        // Determine card styling based on mode and status
                         let headerClass = 'bg-secondary'; // Default/Unknown
                         let statusClass = 'bg-secondary'; // Default/Unknown
+                        let statusIcon = 'fa-question-circle'; // Default icon
+
                         if (stream.connection_status === 'Connected') {
-                            headerClass = stream.mode === 'caller' ? 'bg-warning text-dark' : 'bg-success';
+                            headerClass = stream.mode === 'caller' ? 'bg-warning text-dark' : 'bg-success'; // Caller=Yellow, Listener=Green
                             statusClass = 'bg-success';
+                            statusIcon = 'fa-check-circle';
                         } else if (stream.connection_status === 'Waiting for connection' || stream.connection_status === 'Connecting...') {
                             headerClass = 'bg-info';
                             statusClass = 'bg-info';
+                            statusIcon = 'fa-spinner fa-spin'; // Use spinner for waiting/connecting
                         } else if (stream.connection_status === 'Disconnected' || stream.connection_status === 'Rejected' || stream.connection_status === 'Error') {
                             headerClass = 'bg-danger';
                             statusClass = 'bg-danger';
+                             statusIcon = 'fa-exclamation-triangle';
                         }
-                        
-                        const encryptionDisplay = stream.encryption === 'none' ? 
-                            'None' : (stream.encryption || 'N/A').toUpperCase().replace('_', '-');
-                        
-                        const passphraseDisplay = stream.encryption === 'none' ?
-                            '<span class="text-muted">Not Used</span>' :
-                            (stream.passphrase_set ? '<span class="badge bg-success">Set</span>' : '<span class="badge bg-danger">Not Set</span>');
-                            
-                        const title = stream.mode === 'caller' ? 
-                            `<i class="fas fa-paper-plane"></i> Caller to ${stream.target || 'Unknown'}` : 
-                            `<i class="fas fa-satellite-dish"></i> Listener on Port ${stream.key}`;
-                            
-                        const clientOrTargetLabel = stream.mode === 'caller' ? 'Target' : 'Client';
-                        const clientOrTargetValue = stream.mode === 'caller' ? (stream.target || 'N/A') : (stream.connected_client || 'None');
 
+                        // Prepare display strings
+                        const encryptionDisplay = (stream.encryption || 'none').toUpperCase().replace('_', '-');
+                        const passphraseDisplay = stream.encryption === 'none' ?
+                            '<span class="text-muted fst-italic">Not Used</span>' :
+                            (stream.passphrase_set ? '<span class="badge bg-success">Set</span>' : '<span class="badge bg-danger">Missing</span>');
+
+                        // *** ADDED: QoS Display ***
+                        const qosDisplay = stream.qos_enabled ?
+                            '<span class="badge bg-success">Enabled</span>' :
+                            '<span class="badge bg-secondary">Disabled</span>';
+
+                        const title = stream.mode === 'caller' ?
+                            `<i class="fas fa-paper-plane"></i> Caller to ${stream.target || 'Unknown Target'}` :
+                            `<i class="fas fa-satellite-dish"></i> Listener on Port ${stream.key}`;
+
+                        const clientOrTargetLabel = stream.mode === 'caller' ? 'Target' : 'Client IP';
+                        const clientOrTargetValue = stream.mode === 'caller' ? (stream.target || 'N/A') : (stream.connected_client || 'None Connected');
+
+                        // Build the stream card HTML
+                        // Using form.csrf_token._value() to get token value for JS-rendered forms
+                        const csrfTokenValue = '{{ form.csrf_token._value() }}';
                         const streamCard = `
-                            <div class="col-lg-6">
-                                <div class="card mb-4 stream-card">
+                            <div class="col-lg-6 mb-4">
+                                <div class="card stream-card h-100"> {# Use h-100 for equal height cards #}
                                     <div class="card-header ${headerClass} text-white">
                                         <div class="d-flex justify-content-between align-items-center">
-                                            <span>${title}</span>
-                                            <form method="POST" action="/stop_stream/${stream.key}" style="display: inline;" onsubmit="return confirm('Stop stream ${stream.key}?');">
-                                                <input type="hidden" name="csrf_token" value="{{ form.csrf_token._value() }}"> <button type="submit" class="btn btn-sm btn-danger">
+                                            <span class="fw-bold">${title}</span>
+                                            {# Stop Button Form (ensure CSRF token is included) #}
+                                            <form method="POST" action="/stop_stream/${stream.key}" style="display: inline;" onsubmit="return confirm('Are you sure you want to stop stream ${stream.key}?');">
+                                                <input type="hidden" name="csrf_token" value="${csrfTokenValue}">
+                                                <button type="submit" class="btn btn-sm btn-danger" title="Stop Stream ${stream.key}">
                                                     <i class="fas fa-stop-circle"></i> Stop
                                                 </button>
                                             </form>
                                         </div>
                                     </div>
                                     <div class="card-body">
-                                        <table class="table table-sm table-borderless"> <tbody>
-                                                <tr>
-                                                    <td width="110"><i class="fas fa-file-alt fa-fw"></i> <strong>File</strong></td>
-                                                    <td class="text-break">${stream.file_path || 'N/A'}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><i class="fas fa-sign-in-alt fa-fw"></i> <strong>Mode</strong></td>
-                                                    <td>${stream.mode ? stream.mode.charAt(0).toUpperCase() + stream.mode.slice(1) : 'N/A'}</td>
-                                                </tr>
-                                                 <tr>
-                                                    <td><i class="fas fa-map-marker-alt fa-fw"></i> <strong>${clientOrTargetLabel}</strong></td>
-                                                    <td>${clientOrTargetValue}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><i class="fas fa-history fa-fw"></i> <strong>Latency</strong></td>
-                                                    <td>${stream.latency || 'N/A'} ms</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><i class="fas fa-network-wired fa-fw"></i> <strong>Overhead</strong></td>
-                                                    <td>${stream.overhead_bandwidth || 'N/A'}%</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><i class="fas fa-lock fa-fw"></i> <strong>Encryption</strong></td>
-                                                    <td>${encryptionDisplay} (${passphraseDisplay})</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><i class="fas fa-wifi fa-fw"></i> <strong>Status</strong></td>
-                                                    <td>
-                                                        <span class="badge ${statusClass}">
-                                                            ${stream.connection_status || 'Unknown'}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td><i class="fas fa-hourglass-start fa-fw"></i> <strong>Started</strong></td>
-                                                    <td>${stream.start_time || 'N/A'}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                        
-                                        <div class="d-flex">
-                                            <a href="/stream/${stream.key}" class="btn btn-info btn-sm me-2">
-                                                <i class="fas fa-chart-line"></i> View Details
+                                        <table class="table table-sm table-borderless small mb-2"> <tbody>
+                                            <tr>
+                                                <td width="110"><i class="fas fa-file-alt fa-fw"></i> <strong>File</strong></td>
+                                                <td class="text-break">${stream.file_path || 'N/A'}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-map-marker-alt fa-fw"></i> <strong>${clientOrTargetLabel}</strong></td>
+                                                <td>${clientOrTargetValue}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-history fa-fw"></i> <strong>Latency</strong></td>
+                                                <td>${stream.latency || 'N/A'} ms</td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-network-wired fa-fw"></i> <strong>Overhead</strong></td>
+                                                <td>${stream.overhead_bandwidth || 'N/A'}%</td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-lock fa-fw"></i> <strong>Encryption</strong></td>
+                                                <td>${encryptionDisplay} (${passphraseDisplay})</td>
+                                            </tr>
+                                            <tr> {# *** ADDED QoS Row *** #}
+                                                <td><i class="fas fa-check-circle fa-fw"></i> <strong>QoS</strong></td>
+                                                <td>${qosDisplay}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-wifi fa-fw"></i> <strong>Status</strong></td>
+                                                <td>
+                                                    <span class="badge ${statusClass}">
+                                                        <i class="fas ${statusIcon} me-1"></i>${stream.connection_status || 'Unknown'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><i class="fas fa-hourglass-start fa-fw"></i> <strong>Started</strong></td>
+                                                <td>${stream.start_time || 'N/A'}</td>
+                                            </tr>
+                                        </tbody> </table>
+                                        <div class="d-flex mt-auto pt-2 border-top"> {# Buttons at bottom #}
+                                            <a href="/stream/${stream.key}" class="btn btn-info btn-sm me-2" title="View Detailed Statistics">
+                                                <i class="fas fa-chart-line"></i> Details
                                             </a>
-                                            <a href="/api/debug/${stream.key}" class="btn btn-secondary btn-sm" target="_blank">
-                                                <i class="fas fa-bug"></i> Debug Info
+                                            <a href="/api/debug/${stream.key}" class="btn btn-secondary btn-sm" target="_blank" title="View Raw Debug Info (JSON)">
+                                                <i class="fas fa-bug"></i> Debug
                                             </a>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
+                                    </div> {# End card-body #}
+                                </div> {# End card #}
+                            </div> {# End col #}
                         `;
-                        
+
                         container.append(streamCard);
                     }
                 }).fail(function(xhr, status, error) {
@@ -545,7 +600,7 @@
                     container.html(`
                         <div class="col-12">
                             <div class="alert alert-danger">
-                                <i class="fas fa-exclamation-triangle"></i> Error loading active streams. Please check server logs.
+                                <i class="fas fa-exclamation-triangle"></i> Error loading active streams. Please check server logs or try again later.
                             </div>
                         </div>
                     `);
@@ -553,34 +608,38 @@
                     // Hide refresh indicator after a short delay
                     setTimeout(function() {
                         $('#refresh-indicator').addClass('d-none');
-                    }, 300); // Shorter delay
+                    }, 300);
                 });
-                
+
                 // Also update system info when we refresh streams
                 updateSystemInfo();
             }
-            
+
             // --- Initial Load & Intervals ---
-            updateActiveStreams(); // Initial load
-            // updateSystemInfo(); // Called within updateActiveStreams now
-            
-            setInterval(updateActiveStreams, 5000); // Refresh streams & system info every 5 seconds
-            
+            updateActiveStreams(); // Initial load of streams & system info
+
+            const refreshInterval = 5000; // Refresh every 5 seconds (5000 ms)
+            setInterval(updateActiveStreams, refreshInterval);
+
             // Apply network test results from URL query on initial load (if any)
             function applyNetworkTestResults() {
                 const urlParams = new URLSearchParams(window.location.search);
                 if (urlParams.has('apply_network_test')) {
                     const latency = urlParams.get('latency');
                     const overhead = urlParams.get('overhead');
-                    
+
                     // Update the listener form fields if they exist on this page
                     if (latency && $('#latency').length) {
                         $('#latency').val(latency);
                     }
                     if (overhead && $('#overhead_bandwidth').length) {
-                        $('#overhead_bandwidth').val(overhead);
+                         // Validate overhead from URL is within 1-99
+                         const overheadVal = parseInt(overhead);
+                         if (overheadVal >= 1 && overheadVal <= 99) {
+                             $('#overhead_bandwidth').val(overheadVal);
+                         }
                     }
-                     // Remove query params from URL without reload if possible
+                     // Remove query params from URL without reload for cleaner display
                      if (window.history.replaceState) {
                          const cleanURL = window.location.protocol + "//" + window.location.host + window.location.pathname;
                          window.history.replaceState({path: cleanURL}, '', cleanURL);
@@ -589,7 +648,19 @@
             }
             applyNetworkTestResults();
 
-        });
+            // Helper function to format bytes
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0 || !bytes || isNaN(bytes)) return '0 Bytes';
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                // Ensure index is within bounds
+                const unitIndex = Math.min(i, sizes.length - 1);
+                return parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) + ' ' + sizes[unitIndex];
+            }
+
+        }); // End document.ready
     </script>
 </body>
 </html>

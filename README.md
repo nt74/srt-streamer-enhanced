@@ -9,15 +9,18 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 ## Features
 
 * **Multi-Stream Hosting:** Host up to 10 simultaneous SRT streams.
-* **Listener & Caller Modes:** Easily start streams in either Listener (server) or Caller (client) mode via dedicated forms.
+* **Listener & Caller Modes:** Easily start streams in either Listener (server) or Caller (client) mode via dedicated web UI forms. *** CHANGED ***
 * **GStreamer Pipeline (`filesrc ! tsparse ! srtsink`):**
     * Reads local `.ts` files using `filesrc`.
     * Parses Transport Streams using `tsparse` with timestamping, 7-packet alignment, and **`smoothing-latency=20000` (20ms)** to reduce PCR jitter for professional receivers.
-    * Transmits using `srtsink` configured with user-defined latency, overhead, encryption, and specific DVB/SRT parameters (large buffers, `tlpktdrop`, NAK reports, etc.).
+    * Transmits using `srtsink` configured with user-defined latency, overhead, encryption, Quality of Service (QoS) flag, and specific DVB/SRT parameters (large buffers, `tlpktdrop`, NAK reports, etc.). *** CHANGED ***
 * **DVB Compliance Focus:** Applies specific SRT parameters (`dvb_config.py`) and `tsparse` settings suitable for DVB transport stream carriage.
+* **Configurable Stream Parameters (UI):** Set Latency (20-8000ms), Overhead (1-99%), Encryption (None, AES-128, AES-256 with passphrase), and QoS flag. *** ADDED ***
+* **Configurable QoS:** Option via UI to enable/disable the SRT Quality of Service flag (`qos=true|false`) in the outgoing SRT URI. *** ADDED ***
+* **Accurate Stats Parsing:** Correctly parses detailed SRT statistics strings from `srtsink` for both Listener and Caller modes. *** ADDED ***
 * **Integrated Network Testing:** Measures RTT/Loss using `ping`/`iperf3`, recommends SRT Latency/Overhead (based on SRT Guide principles), and allows applying settings to the stream form.
 * **Real-time Monitoring & Statistics:** Dashboard with live status, detailed stream view with charts (Chart.js) for Bitrate/RTT/Loss history, packet counters, buffer levels, and debug info API.
-* **Media Management:** AJAX media browser modal lists `.ts` files; Media Info page uses `ffprobe`/`mediainfo`. Potential upload support.
+* **Media Management:** AJAX media browser modal lists `.ts` files; Media Info page uses `ffprobe`/`mediainfo`.
 * **Dynamic Web Interface:** Built with Bootstrap 5, jQuery. Includes dashboard, caller page, network test page, stream details. AJAX updates for system info & streams. Theme switcher.
 * **Secure Access & Operations:** NGINX Basic Auth frontend; Flask-WTF CSRF Protection; requires strong `SECRET_KEY`.
 * **Health Check:** Endpoint at `/health`.
@@ -40,9 +43,10 @@ The core functionality revolves around a carefully configured GStreamer pipeline
     ```gst-pipeline
     filesrc location="..." ! \
     tsparse name="tsparse_..." set-timestamps=true alignment=7 smoothing-latency=20000 parse-private-sections=true ! \
-    srtsink name="srtsink_..." uri="srt://..." [SRT params like mode, latency, overhead, encryption, DVB settings] wait-for-connection=true
+    srtsink name="srtsink_..." uri="srt://HOST:PORT?mode=...&latency=...&overheadbandwidth=...&passphrase=...&pbkeylen=...&qos=..." [Other Params]
     ```
-    The `smoothing-latency=20000` (20ms) on `tsparse` is specifically chosen to improve PCR timing stability for professional broadcast equipment.
+    * *** CHANGED: Updated example URI parameters and removed `wait-for-connection` as it's handled by mode/defaults. ***
+    * The `smoothing-latency=20000` (20ms) on `tsparse` is specifically chosen to improve PCR timing stability for professional broadcast equipment.
 
 ## System Requirements
 
@@ -200,16 +204,17 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 ## Usage Workflow
 
 1.  **Access & Login:** Open the application URL, log in via NGINX Basic Auth.
-2.  **Dashboard (`/`):** View system status, active streams. Use form to start Listener streams (use `Browse` modal for file selection).
-3.  **Start Caller (`/caller`):** Navigate here to start Caller streams (specify target, select file via `Browse` modal).
+2.  **Dashboard (`/`):** View system status, active streams. Use form to start **Listener** streams (select port, file, latency, overhead (1-99%), encryption, QoS). Use `Browse` modal for file selection. *** CHANGED ***
+3.  **Start Caller (`/caller`):** Navigate here to start **Caller** streams (specify target host/port, select file, latency, overhead (1-99%), encryption, QoS). Use `Browse` modal for file selection. *** CHANGED ***
 4.  **Network Test (`/network_test`):** Run tests, view results/recommendations. Click "Apply..." to pre-fill Listener form on dashboard.
-5.  **View Details (`/stream/<key>`):** Click "View Details" on dashboard. Monitor live stats, charts, status. Access debug info.
+5.  **View Details (`/stream/<key>`):** Click "View Details" on dashboard. Monitor live stats (Bitrate, RTT, Loss %, Packet Counters, etc.), charts, connection status (including inferred caller status). Access debug info. *** CHANGED ***
 6.  **Stop Streams:** Use "Stop" buttons on dashboard or details page.
 
 ## Configuration & Tuning Tips (from SRT Guide)
 
 * **SRT Latency:** Determines buffer size for jitter and retransmissions. Set based on RTT (e.g., 4x RTT) and network stability. Higher value of sender/receiver setting is used. Adjust based on buffer monitoring.
-* **Bandwidth Overhead:** Reserve extra bandwidth (%) for packet recovery. Higher loss needs more overhead. Ensure total bandwidth fits link capacity.
+* **Bandwidth Overhead:** Reserve extra bandwidth (**1-99%**) for packet recovery. Higher loss needs more overhead. Ensure total bandwidth fits link capacity. Start around 25% and adjust based on observed loss and retransmissions on the stats page. *** CHANGED ***
+* **Quality of Service (QoS):** The `qos=true` URI parameter (enabled via checkbox) attempts to set DSCP network flags. Its effectiveness depends entirely on whether the intermediate network devices respect these flags. May have no effect on standard internet paths. *** ADDED ***
 * **Monitoring Buffers (Stream Details Page):**
     * **Sender:** Consistent high Send Buffer Level often means bitrate too high or overhead too low. Occasional spikes might be handled by increasing Latency.
     * **Receiver:** Frequent drops to zero suggest bitrate too high. Occasional drops might need more Latency.

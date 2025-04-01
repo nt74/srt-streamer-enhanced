@@ -99,44 +99,93 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
         ```bash
         sudo mkdir -p /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data /opt/srt-streamer-enhanced/media
         sudo chown root:root /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data /opt/srt-streamer-enhanced/media
-        # Ensure external_ip.txt can be written if needed by get_external_ip.sh or similar
-        # sudo touch /opt/srt-streamer-enhanced/app/data/external_ip.txt
-        # sudo chown <user_that_runs_script>:root /opt/srt-streamer-enhanced/app/data/external_ip.txt
+        # Ensure external_ip.txt exists and is writable by the process that updates it
+        sudo touch /opt/srt-streamer-enhanced/app/data/external_ip.txt
+        # Example: sudo chown <user_that_runs_script>:root /opt/srt-streamer-enhanced/app/data/external_ip.txt
         ```
     * **NGINX:** Configure reverse proxy for `http://127.0.0.1:5000`, set up Basic Auth with `htpasswd` (use a strong password for user `admin`, secure `/etc/nginx/.htpasswd` permissions). Test/restart Nginx.
     * **Flask Secret Key:** Generate (`openssl rand -hex 32`) and copy a strong key.
 
 5.  **Set Up Systemd Services (Recommended):**
     * **Network Tuning Script:** Ensure `/opt/srt-streamer-enhanced/network-tuning.sh` is executable (`sudo chmod +x ...`).
-    * **Network Tuning Service (`/etc/systemd/system/network-tuning.service`):** *(Keep definition as provided)*
-    * **Application Service (`/etc/systemd/system/srt-streamer.service`):** *(Keep definition as provided, but ensure the `SECRET_KEY` environment variable is updated)*
+    * **Network Tuning Service:** Create the file `/etc/systemd/system/network-tuning.service` with the following content:
         ```ini
-        # ... [Unit] section ...
+        [Unit]
+        Description=Apply Network Settings for SRT Streamer Enhanced
+        After=network.target
+        Before=srt-streamer.service nginx.service
+        ConditionFileIsExecutable=/opt/srt-streamer-enhanced/network-tuning.sh
+
         [Service]
-        # ... User, Group, WorkingDirectory ...
-        Environment="SECRET_KEY=paste_your_generated_secret_key_here" # <-- PASTE KEY HERE
+        Type=oneshot
+        RemainAfterExit=yes
+        User=root
+        Group=root
+        ExecStart=/opt/srt-streamer-enhanced/network-tuning.sh
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        # This service is not typically enabled directly.
+        # It's pulled in by the 'Wants=' directive in srt-streamer.service.
+        # WantedBy=multi-user.target
+        ```
+    * **Application Service:** Create/Edit the main service file `/etc/systemd/system/srt-streamer.service` with the following content:
+        ```ini
+        [Unit]
+        Description=SRT Streamer Enhanced - DVB Compliant App Server (Waitress)
+        After=network.target network-online.target network-tuning.service nginx.service
+        Wants=network-online.target network-tuning.service # Ensures tuning runs first
+
+        [Service]
+        Type=simple
+        User=root # Review if non-root needed, ensure permissions align
+        Group=root
+        WorkingDirectory=/opt/srt-streamer-enhanced
+        # --- IMPORTANT: Replace with your generated key ---
+        Environment="SECRET_KEY=paste_your_generated_secret_key_here"
+        # --- Other Environment Variables ---
         Environment="HOST=127.0.0.1"
         Environment="PORT=5000"
-        # ... Other Environment vars, ExecStart, Restart, etc. ...
+        Environment="THREADS=8" # Adjust as needed
+        Environment="MEDIA_FOLDER=/opt/srt-streamer-enhanced/media"
+        Environment="FLASK_ENV=production"
+        # --- Execution ---
+        ExecStart=/opt/venv/bin/python3 /opt/srt-streamer-enhanced/wsgi.py # Direct execution
+        Restart=on-failure
+        RestartSec=5s
+        TimeoutStopSec=30s
+        KillMode=mixed
+        StandardOutput=journal
+        StandardError=journal
+
+        # --- Security Hardening (Optional but Recommended - Uncomment and adjust paths if needed) ---
+        # PrivateTmp=true
+        # ProtectSystem=strict
+        # ProtectHome=true
+        # NoNewPrivileges=true
+        # CapabilityBoundingSet=CAP_NET_BIND_SERVICE # May need adjustment - likely not needed if User=root and running on port > 1024
+        # ReadWritePaths=/opt/srt-streamer-enhanced/media /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data # Explicitly allow writes
+
         [Install]
-        # ... WantedBy ...
+        WantedBy=multi-user.target
         ```
-    * **Paste your generated `SECRET_KEY`**.
-    * **Reload, enable, start:**
+    * **Paste your generated `SECRET_KEY`** into the `Environment=` line in `/etc/systemd/system/srt-streamer.service`.
+    * **Reload systemd, enable and start the *main* service:**
         ```bash
         sudo systemctl daemon-reload
-        sudo systemctl enable srt-streamer.service
+        sudo systemctl enable srt-streamer.service # Do NOT enable network-tuning.service directly
         sudo systemctl start srt-streamer.service
         ```
 
-6.  **Verify:** Check service status, logs (`journalctl -u srt-streamer.service`, `/var/log/srt-streamer/srt_streamer.log`), access web UI.
+6.  **Verify:** Check service status (`systemctl status srt-streamer.service network-tuning.service`), logs (`journalctl -u srt-streamer.service`, `/var/log/srt-streamer/srt_streamer.log`), and access the web UI via the Nginx address.
 
 ## Usage Workflow
 
 1.  **Access & Login:** Open URL, login via Basic Auth.
 2.  **Dashboard (`/`):** View status, active streams. Start **Listener** streams (select port, file, latency, overhead (1-99%), encryption, QoS). Use `Browse`. *** UPDATED ***
 3.  **Start Caller (`/caller`):** Start **Caller** streams (specify target host/port, select file, latency, overhead (1-99%), encryption, QoS). Use `Browse`. *** UPDATED ***
-4.  **Network Test (`/network_test`):** Select mode (Closest, Regional, Manual), run test, view results (RTT, Bandwidth [UDP/TCP], Loss/Jitter [UDP only]) & Haivision-based recommendations. Click "Apply..." to pre-fill Listener form. *** UPDATED ***
+4.  **Network Test (`/network_test`):** Select mode (Closest, Regional, Manual), run test, view results (RTT, Bandwidth [UDP/TCP], Loss/Jitter [UDP only]) & Haivision-based recommendations (may be estimated for high RTT). Click "Apply..." to pre-fill Listener form. *** UPDATED ***
 5.  **View Details (`/stream/<key>`):** Click "Details" on dashboard. Monitor live stats, charts, connection status (incl. caller IP). Access debug info. *** UPDATED ***
 6.  **Stop Streams:** Use "Stop" buttons.
 

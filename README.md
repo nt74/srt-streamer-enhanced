@@ -69,45 +69,103 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 *(Assumes default installation path `/opt/srt-streamer-enhanced` and venv path `/opt/venv`. Adapt if necessary.)*
 
 1.  **Get the Code:**
-    * Clone or download source to `/opt/srt-streamer-enhanced`.
+    * Clone the repository or download the source code.
         ```bash
         # Example using git
         sudo git clone [https://github.com/nt74/srt-streamer-enhanced.git](https://github.com/nt74/srt-streamer-enhanced.git) /opt/srt-streamer-enhanced
         cd /opt/srt-streamer-enhanced
         ```
 
-2.  **Install System Dependencies:**
-    * Install Python 3, pip, venv, GStreamer (+ plugins `base`, `good`, `bad`, `ugly`, `libav`), PyGObject build dependencies (`gobject-introspection-devel`, `cairo-gobject-devel`, etc.), Nginx, curl, `iperf3`, `ping` (`iputils-ping`), `dig` (`dnsutils`/`bind-utils`), `ffmpeg`, `mediainfo`, `htpasswd` (`apache2-utils`/`httpd-tools`).
-    * *(Keep specific package names for Debian/RHEL examples as provided)*
+2.  **Install System Dependencies:** *** MERGED: Added Detailed Commands ***
+    * Install necessary packages for your distribution (Python 3, pip, venv, GStreamer + plugins, Nginx, curl, iperf3, ping, dig, ffmpeg, mediainfo, htpasswd).
+    * **Debian / Ubuntu Example:**
+        ```bash
+        sudo apt update && sudo apt install -y \
+            python3 python3-pip python3-venv python3-gi gir1.2-gobject-2.0 \
+            gir1.2-gst-rtsp-server-1.0 gir1.2-glib-2.0 libgirepository1.0-dev \
+            gcc libcairo2-dev pkg-config python3-dev \
+            gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-tools gstreamer1.0-libav \
+            nginx curl iperf3 iputils-ping dnsutils ffmpeg mediainfo apache2-utils
+        ```
+    * **RHEL / Rocky / Fedora Example:**
+        ```bash
+        sudo dnf update && sudo dnf install -y \
+            python3 python3-pip python3-gobject gobject-introspection-devel \
+            cairo-gobject-devel python3-devel pkgconf-pkg-config gcc \
+            gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
+            gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav \
+            nginx curl iperf3 iputils bind-utils ffmpeg mediainfo httpd-tools
+        ```
+        *(Use `yum` instead of `dnf` on older RHEL/CentOS)*
 
 3.  **Set Up Python Environment:**
-    * Create and activate virtual environment (e.g., `/opt/venv`).
+    * Create and activate a Python virtual environment (e.g., `/opt/venv`).
         ```bash
         sudo python3 -m venv /opt/venv
         source /opt/venv/bin/activate
         ```
-    * Install Python packages:
+    * Install required Python packages using `requirements.txt`:
         ```bash
         pip install -r requirements.txt
         ```
-    * Deactivate: `deactivate`
+    * Deactivate the environment.
+        ```bash
+        deactivate
+        ```
 
 4.  **Configure Application:**
-    * **Media Files:** Place `.ts` files in `/opt/srt-streamer-enhanced/media/` (create if needed).
-    * **Log/Data Directories:** Ensure directories exist and have correct permissions (adjust owner if service runs as non-root):
+    * **Media Files:** Place your `.ts` source files into `/opt/srt-streamer-enhanced/media/`. Create the directory if it doesn't exist.
         ```bash
-        sudo mkdir -p /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data /opt/srt-streamer-enhanced/media
-        sudo chown root:root /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data /opt/srt-streamer-enhanced/media
-        # Ensure external_ip.txt exists and is writable by the process that updates it
-        sudo touch /opt/srt-streamer-enhanced/app/data/external_ip.txt
-        # Example: sudo chown <user_that_runs_script>:root /opt/srt-streamer-enhanced/app/data/external_ip.txt
+        sudo mkdir -p /opt/srt-streamer-enhanced/media
+        # Add your .ts files here, then set permissions
+        sudo chown root:root /opt/srt-streamer-enhanced/media # Adjust owner later if needed
+        sudo chmod 755 /opt/srt-streamer-enhanced/media # Ensure directory is accessible
+        sudo chown root:root /opt/srt-streamer-enhanced/media/*.ts # Adjust owner later if needed
+        sudo chmod 644 /opt/srt-streamer-enhanced/media/*.ts # Ensure files are readable
         ```
-    * **NGINX:** Configure reverse proxy for `http://127.0.0.1:5000`, set up Basic Auth with `htpasswd` (use a strong password for user `admin`, secure `/etc/nginx/.htpasswd` permissions). Test/restart Nginx.
-    * **Flask Secret Key:** Generate (`openssl rand -hex 32`) and copy a strong key.
+    * **Log/Data Directories:** Create directories and set permissions (assuming service runs as root):
+        ```bash
+        sudo mkdir -p /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
+        sudo chown root:root /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
+        # Adjust owner if you modify the systemd service to run as a different user
+        # Ensure external_ip.txt exists and is writable by the process that updates it (if applicable)
+        sudo touch /opt/srt-streamer-enhanced/app/data/external_ip.txt
+        # Example: sudo chown <your_service_user>:root /opt/srt-streamer-enhanced/app/data/external_ip.txt
+        ```
+    * **NGINX:**
+        * Configure Nginx as a reverse proxy for `http://127.0.0.1:5000`.
+        * Create a password file (e.g., `/etc/nginx/.htpasswd`) for Basic Authentication using `htpasswd`. **Set a strong password and change the example user `admin`.** Secure the file permissions.
+            ```bash
+            sudo htpasswd -c /etc/nginx/.htpasswd admin
+            # Enter password
+            # Check Nginx user (e.g., www-data on Debian, nginx on RHEL) and set ownership
+            # sudo ps aux | grep nginx
+            NGINX_USER=$(ps aux | grep '[n]ginx: worker process' | head -n 1 | awk '{print $1}')
+            [ -z "$NGINX_USER" ] && NGINX_USER=nginx # Default fallback
+            sudo chown $NGINX_USER:$NGINX_USER /etc/nginx/.htpasswd # Adjust group if needed
+            sudo chmod 640 /etc/nginx/.htpasswd
+            ```
+        * Add/Enable the Nginx site configuration and test/restart Nginx.
+            ```bash
+            # Example: sudo ln -s /opt/srt-streamer-enhanced/nginx.conf /etc/nginx/sites-enabled/srt-streamer
+            sudo nginx -t
+            sudo systemctl restart nginx
+            ```
+    * **Flask Secret Key:** Generate a strong secret key:
+        ```bash
+        openssl rand -hex 32
+        ```
+        **Copy this key.** You will need it for the systemd service file in the next step.
 
 5.  **Set Up Systemd Services (Recommended):**
-    * **Network Tuning Script:** Ensure `/opt/srt-streamer-enhanced/network-tuning.sh` is executable (`sudo chmod +x ...`).
-    * **Network Tuning Service:** Create the file `/etc/systemd/system/network-tuning.service` with the following content:
+    * **Network Tuning Script:** Ensure the network tuning script exists at `/opt/srt-streamer-enhanced/network-tuning.sh` and is executable:
+        ```bash
+        sudo chmod +x /opt/srt-streamer-enhanced/network-tuning.sh
+        ```
+    * **Network Tuning Service:** Create the service file `/etc/systemd/system/network-tuning.service`:
         ```ini
         [Unit]
         Description=Apply Network Settings for SRT Streamer Enhanced
@@ -119,17 +177,15 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
         Type=oneshot
         RemainAfterExit=yes
         User=root
-        Group=root
+        Group=root # Added Group for consistency
         ExecStart=/opt/srt-streamer-enhanced/network-tuning.sh
         StandardOutput=journal
         StandardError=journal
 
         [Install]
-        # This service is not typically enabled directly.
-        # It's pulled in by the 'Wants=' directive in srt-streamer.service.
-        # WantedBy=multi-user.target
+        # Intentionally empty - pulled in by srt-streamer.service Wants=
         ```
-    * **Application Service:** Create/Edit the main service file `/etc/systemd/system/srt-streamer.service` with the following content:
+    * **Application Service:** Create/Edit the main service file `/etc/systemd/system/srt-streamer.service`:
         ```ini
         [Unit]
         Description=SRT Streamer Enhanced - DVB Compliant App Server (Waitress)
@@ -141,15 +197,12 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
         User=root # Review if non-root needed, ensure permissions align
         Group=root
         WorkingDirectory=/opt/srt-streamer-enhanced
-        # --- IMPORTANT: Replace with your generated key ---
-        Environment="SECRET_KEY=paste_your_generated_secret_key_here"
-        # --- Other Environment Variables ---
+        Environment="SECRET_KEY=paste_your_generated_secret_key_here" # <-- PASTE KEY HERE
         Environment="HOST=127.0.0.1"
         Environment="PORT=5000"
         Environment="THREADS=8" # Adjust as needed
         Environment="MEDIA_FOLDER=/opt/srt-streamer-enhanced/media"
         Environment="FLASK_ENV=production"
-        # --- Execution ---
         ExecStart=/opt/venv/bin/python3 /opt/srt-streamer-enhanced/wsgi.py # Direct execution
         Restart=on-failure
         RestartSec=5s
@@ -163,8 +216,8 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
         # ProtectSystem=strict
         # ProtectHome=true
         # NoNewPrivileges=true
-        # CapabilityBoundingSet=CAP_NET_BIND_SERVICE # May need adjustment - likely not needed if User=root and running on port > 1024
-        # ReadWritePaths=/opt/srt-streamer-enhanced/media /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data # Explicitly allow writes
+        # CapabilityBoundingSet=CAP_NET_BIND_SERVICE # May need adjustment
+        # ReadWritePaths=/opt/srt-streamer-enhanced/media /var/log/srt-streamer /opt/srt-streamer-enhanced/app/data
 
         [Install]
         WantedBy=multi-user.target
@@ -181,26 +234,26 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 
 ## Usage Workflow
 
-1.  **Access & Login:** Open URL, login via Basic Auth.
-2.  **Dashboard (`/`):** View status, active streams. Start **Listener** streams (select port, file, latency, overhead (1-99%), encryption, QoS). Use `Browse`. *** UPDATED ***
-3.  **Start Caller (`/caller`):** Start **Caller** streams (specify target host/port, select file, latency, overhead (1-99%), encryption, QoS). Use `Browse`. *** UPDATED ***
-4.  **Network Test (`/network_test`):** Select mode (Closest [TCP], Regional [TCP], Manual [TCP/UDP]), run test, view results (RTT, Bandwidth, Loss/Jitter [UDP only]) & Haivision-based recommendations (may be estimated if loss not directly measured). Click "Apply..." to pre-fill Listener form. *** UPDATED Network Test Logic ***
-5.  **View Details (`/stream/<key>`):** Click "Details" on dashboard. Monitor live stats, charts, connection status (incl. caller IP). Access debug info. *** UPDATED ***
-6.  **Stop Streams:** Use "Stop" buttons.
+1.  **Access & Login:** Open the application URL, log in via NGINX Basic Auth.
+2.  **Dashboard (`/`):** View system status, active streams. Use form to start **Listener** streams (select port, file, latency, overhead (1-99%), encryption, QoS). Use `Browse` modal for file selection. *** UPDATED ***
+3.  **Start Caller (`/caller`):** Navigate here to start **Caller** streams (specify target host/port, select file, latency, overhead (1-99%), encryption, QoS). Use `Browse` modal for file selection. *** UPDATED ***
+4.  **Network Test (`/network_test`):** Select mode (Closest [TCP], Regional [TCP], Manual [TCP/UDP]), run test, view results (RTT, Bandwidth, Loss/Jitter [UDP only]) & Haivision-based recommendations (may be estimated if loss not directly measured). Click "Apply..." to pre-fill Listener form on dashboard. *** UPDATED Network Test Logic ***
+5.  **View Details (`/stream/<key>`):** Click "Details" on dashboard. Monitor live stats (Bitrate, RTT, Loss %, Packet Counters, etc.), charts, connection status (including inferred caller status). Access debug info. *** UPDATED ***
+6.  **Stop Streams:** Use "Stop" buttons on dashboard or details page.
 
 ## Configuration & Tuning Tips (from SRT Guide)
 
-* **SRT Latency:** Buffer size (ms). Base on measured RTT and loss (Network Test helps). `Latency = RTT Multiplier * RTT`. Higher latency handles more jitter/loss but increases delay. Start with recommendation, monitor buffer stats on Details page.
-* **Bandwidth Overhead:** Reserve extra bandwidth (**1-99%**) for recovery. Higher loss/retransmits need more overhead. Use Network Test recommendation as starting point. Monitor packet stats (retransmits, drops) on Details page. Ensure `Stream Bitrate * (1 + Overhead/100)` fits your network path capacity. *** UPDATED Range ***
-* **Quality of Service (QoS):** Enabling the `qos=true` URI parameter (via checkbox) attempts to set DSCP network flags for prioritized packet handling. Its actual effect **depends entirely on intermediate network devices** respecting these flags. May have little to no effect on the public internet. *** ADDED ***
-* **Monitoring Buffers (Stream Details Page):** Guide for tuning Latency.
-    * *Sender Buffer:* High average level might indicate insufficient link bandwidth or too low Overhead %. Spikes might need more Latency.
-    * *Receiver Buffer:* Frequent drops to near zero indicate insufficient Latency or network issues exceeding the buffer's capacity.
-* **Packet Loss:** Monitor Lost/Dropped/Retransmitted packets. Increase Latency or Overhead based on patterns. Consistent high loss might require addressing the underlying network path.
+* **SRT Latency:** Determines buffer size for jitter and retransmissions. Set based on RTT (e.g., 4x RTT) and network stability. Higher value of sender/receiver setting is used. Adjust based on buffer monitoring.
+* **Bandwidth Overhead:** Reserve extra bandwidth (**1-99%**) for packet recovery. Higher loss needs more overhead. Ensure total bandwidth fits link capacity. Start around 25% and adjust based on observed loss and retransmissions on the stats page. *** CHANGED ***
+* **Quality of Service (QoS):** The `qos=true` URI parameter (enabled via checkbox) attempts to set DSCP network flags. Its effectiveness depends entirely on whether the intermediate network devices respect these flags. May have no effect on standard internet paths. *** ADDED ***
+* **Monitoring Buffers (Stream Details Page):**
+    * **Sender:** Consistent high Send Buffer Level often means bitrate too high or overhead too low. Occasional spikes might be handled by increasing Latency.
+    * **Receiver:** Frequent drops to zero suggest bitrate too high. Occasional drops might need more Latency.
+* **Packet Loss:** Monitor Lost/Skipped packets. Increase Latency for slow/jitter-related increases. Lower Bitrate or increase Overhead for large jumps/bursts.
 
 ## References
 
-* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf) [cite: 3]
+* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf)
 * [SRT Alliance](https://www.srtalliance.org/)
 * [SRT GitHub Repository](https://github.com/Haivision/srt)
 

@@ -4,7 +4,7 @@
 
 `srt-streamer-enhanced` is a professional solution for testing SRT (Secure Reliable Transport) listeners and callers. Built with Python, Flask, and the GStreamer multimedia framework, it provides a web interface to manage and monitor multiple SRT streams originating from pre-recorded Transport Stream (TS) files.
 
-The core functionality revolves around a carefully configured GStreamer pipeline (`filesrc ! tsparse ! srtsink`) designed for stable, DVB-compliant TS-over-SRT streaming, making it ideal for testing professional SRT IRDs and receivers (Ateme, Appear, Haivision, etc.). It includes an advanced network testing tool using `ping` and `iperf3` (UDP with TCP fallback for high latency) to provide SRT configuration recommendations (Latency, Overhead) based on principles outlined in the Haivision SRT Deployment Guide. *** CHANGED *** The web interface uses Bootstrap 5, jQuery, and Chart.js for a dynamic and informative user experience.
+The core functionality revolves around a carefully configured GStreamer pipeline (`filesrc ! tsparse ! srtsink`) designed for stable, DVB-compliant TS-over-SRT streaming, making it ideal for testing professional SRT IRDs and receivers (Ateme, Appear, Haivision, etc.). It includes an advanced network testing tool using `ping` and `iperf3` (**TCP for automatic tests, selectable TCP/UDP for manual tests**) to provide SRT configuration recommendations (Latency, Overhead) based on principles outlined in the Haivision SRT Deployment Guide. *** UPDATED Network Test Description *** The web interface uses Bootstrap 5, jQuery, and Chart.js for a dynamic and informative user experience.
 
 ## Features
 
@@ -18,12 +18,11 @@ The core functionality revolves around a carefully configured GStreamer pipeline
 * **Configurable Stream Parameters (UI):** Set Latency (20-8000ms), Overhead (1-99%), Encryption (None, AES-128, AES-256 with passphrase), and QoS flag. *** UPDATED Overhead Range ***
 * **Configurable QoS:** Option via UI to enable/disable the SRT Quality of Service flag (`qos=true|false`) in the outgoing SRT URI. *** ADDED ***
 * **Accurate Stats Parsing:** Correctly parses detailed SRT statistics strings from `srtsink` for both Listener and Caller modes. *** ADDED ***
-* **Integrated Network Testing:** *** ADDED/CHANGED ***
+* **Integrated Network Testing:** *** UPDATED Network Test Logic ***
     * Measures RTT using `ping`.
-    * Measures Loss/Jitter/Bandwidth using `iperf3` (UDP test).
-    * **TCP Fallback:** Automatically switches to an `iperf3` TCP test if ping RTT exceeds a threshold (e.g., 250ms), providing bandwidth data even when UDP tests are unreliable.
-    * **Multiple Modes:** Offers "Auto (Closest)" based on GeoIP location, "Auto (Regional)" testing random servers in a chosen continent, and "Manual" mode.
-    * **Haivision-Based Recommendations:** Recommends SRT Latency/Overhead based on measured RTT and Loss (or assumed loss if TCP fallback occurs), derived from Haivision SRT Deployment Guide principles.
+    * Measures Bandwidth using `iperf3` (**TCP for Auto modes, selectable TCP/UDP for Manual mode**). Loss/Jitter metrics are primarily available from UDP tests.
+    * **Multiple Modes:** Offers "Auto (Closest)" (TCP iperf3 based on GeoIP location), "Auto (Regional)" (TCP iperf3 testing random servers in a chosen continent), and "Manual" mode (selectable TCP or UDP iperf3).
+    * **Haivision-Based Recommendations:** Recommends SRT Latency/Overhead based on measured RTT and Loss (Note: Loss is assumed when using TCP tests, typically resulting in higher recommendations), derived from Haivision SRT Deployment Guide principles.
     * **Apply Settings:** Allows applying recommended settings directly to the Listener stream form.
 * **Real-time Monitoring & Statistics:** Dashboard with live status, detailed stream view with charts (Chart.js) for Bitrate/RTT/Loss history, packet counters, buffer levels, connection status (including inferred caller IP for listeners), and debug info API. *** CHANGED ***
 * **Media Management:** AJAX media browser modal lists `.ts` files; Media Info page uses `ffprobe`/`mediainfo`.
@@ -185,7 +184,7 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 1.  **Access & Login:** Open URL, login via Basic Auth.
 2.  **Dashboard (`/`):** View status, active streams. Start **Listener** streams (select port, file, latency, overhead (1-99%), encryption, QoS). Use `Browse`. *** UPDATED ***
 3.  **Start Caller (`/caller`):** Start **Caller** streams (specify target host/port, select file, latency, overhead (1-99%), encryption, QoS). Use `Browse`. *** UPDATED ***
-4.  **Network Test (`/network_test`):** Select mode (Closest, Regional, Manual), run test, view results (RTT, Bandwidth [UDP/TCP], Loss/Jitter [UDP only]) & Haivision-based recommendations (may be estimated for high RTT). Click "Apply..." to pre-fill Listener form. *** UPDATED ***
+4.  **Network Test (`/network_test`):** Select mode (Closest [TCP], Regional [TCP], Manual [TCP/UDP]), run test, view results (RTT, Bandwidth, Loss/Jitter [UDP only]) & Haivision-based recommendations (may be estimated if loss not directly measured). Click "Apply..." to pre-fill Listener form. *** UPDATED Network Test Logic ***
 5.  **View Details (`/stream/<key>`):** Click "Details" on dashboard. Monitor live stats, charts, connection status (incl. caller IP). Access debug info. *** UPDATED ***
 6.  **Stop Streams:** Use "Stop" buttons.
 
@@ -201,7 +200,7 @@ Linux distributions with GStreamer 1.0 support: Ubuntu/Debian, Rocky/RHEL/Fedora
 
 ## References
 
-* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf)
+* [Haivision SRT Protocol Deployment Guide v1.5.x (PDF)](https://github.com/nt74/srt-streamer-enhanced/blob/main/docs/SRT%20Deployment%20Guide-v1-20250328_232802.pdf) [cite: 3]
 * [SRT Alliance](https://www.srtalliance.org/)
 * [SRT GitHub Repository](https://github.com/Haivision/srt)
 

@@ -77,6 +77,8 @@ logger.info("CSRF protection initialized.")
 
 # --- Initialize Managers ---
 # Ensure StreamManager is initialized *after* app config is set
+# This line correctly passes the media folder path to the StreamManager constructor
+# The TypeError previously observed originates from the StreamManager.__init__ definition itself
 app.stream_manager = StreamManager(app.config['MEDIA_FOLDER'])
 
 # --- Register Routes ---

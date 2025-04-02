@@ -1,20 +1,21 @@
 # /opt/srt-streamer-enhanced/app/forms.py
 # Contains Flask-WTF form definitions for the SRT Streamer application.
+# Based on the user-provided working version, but with the enhanced NetworkTestForm added back.
 
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField,
     IntegerField,
     SelectField,
-    RadioField,
-    PasswordField,
-    BooleanField,
+    RadioField, # Added for enhanced NetworkTestForm modes
+    PasswordField, # Kept in case used elsewhere
+    BooleanField, # Added for QoS
     FileField
 )
 from wtforms.validators import (
     DataRequired,
     Length,
-    NumberRange,
+    NumberRange, # Modified for Overhead
     Optional,
     ValidationError
 )
@@ -39,7 +40,7 @@ class PercentageInput(Input):
                                          value=field._value(),
                                          **kwargs))
 
-# --- Main StreamForm (Primarily for Listener on Index Page) ---
+# --- Main StreamForm (From User's Working Version) ---
 class StreamForm(FlaskForm):
     """
     Form for configuring and starting SRT streams, primarily used for Listener mode
@@ -48,7 +49,7 @@ class StreamForm(FlaskForm):
     # Port selection (Listener Mode)
     port = SelectField(
         'Port',
-        choices=[(str(port), str(port)) for port in range(10001, 10011)],  # Ports 10001-10010
+        choices=[(str(port), str(port)) for port in range(10001, 10011)], # Ports 10001-10010
         default='10001',
         validators=[DataRequired()],
         render_kw={
@@ -75,7 +76,7 @@ class StreamForm(FlaskForm):
             DataRequired(),
             NumberRange(min=20, max=8000, message="Latency must be between 20 and 8000 ms")
         ],
-        default=300,  # Default latency
+        default=300, # Default latency
         render_kw={
             'class': 'form-control',
             'min': '20',
@@ -89,14 +90,14 @@ class StreamForm(FlaskForm):
         'Overhead Bandwidth',
         validators=[
             DataRequired(),
-            NumberRange(min=1, max=99, message="Overhead must be between 1% and 99%")
+            NumberRange(min=1, max=99, message="Overhead must be between 1% and 99%") # MODIFIED Range
         ],
-        default=25,  # Default overhead
-        widget=PercentageInput(),  # Use custom widget
+        default=25, # Default overhead
+        widget=PercentageInput(), # Use custom widget
         render_kw={
             'class': 'form-control',
-            'min': '1',
-            'max': '99',
+            'min': '1',   # MODIFIED min
+            'max': '99',  # MODIFIED max
             'step': '1',
             'aria-describedby': 'overheadHelp'
         },
@@ -139,7 +140,7 @@ class StreamForm(FlaskForm):
             ('aes-128', 'AES-128'),
             ('aes-256', 'AES-256')
         ],
-        default='none',
+        default='none', # Default to no encryption
         render_kw={
             'class': 'form-select',
             'aria-describedby': 'encryptionHelp'
@@ -163,7 +164,7 @@ class StreamForm(FlaskForm):
     # QoS Field
     qos = BooleanField(
         'Enable QoS',
-        default=False,
+        default=False, # Default to disabled
         render_kw={
             'class': 'form-check-input'
         },
@@ -182,36 +183,37 @@ class StreamForm(FlaskForm):
         description="DVB compliance is mandatory for all streams"
     )
 
+    # Extended validation method
     def validate(self, extra_validators=None):
         """
-        Extended validation with custom rules
+        Extended validation with custom rules for encryption and caller mode requirements.
         """
-        valid = super(StreamForm, self).validate(extra_validators=extra_validators)
-        if not valid:
+        if not super().validate(extra_validators):
             return False
-
         if self.encryption.data != 'none' and not self.passphrase.data:
             self.passphrase.errors.append('Passphrase is required when encryption is enabled')
             return False
+        # SRT passphrase length validation (strict 10-79)
+        if self.encryption.data != 'none' and self.passphrase.data and (len(self.passphrase.data) < 10 or len(self.passphrase.data) > 79):
+             self.passphrase.errors.append('Passphrase must be between 10 and 79 characters for SRT.')
+             # return False # Uncomment if strictness required
 
         if self.mode.data == 'caller' and not self.target_address.data:
             self.target_address.errors.append('Target address is required in Caller mode')
             return False
-
         if self.target_address.data:
             if not self._validate_target_address(self.target_address.data):
                 self.target_address.errors.append('Invalid target address format (IP or hostname)')
                 return False
-
         return True
 
     def _validate_target_address(self, address):
         """ Basic validation for IP address or hostname format. """
         if not address or len(address) > 255: return False
-        if any(c in address for c in ' \t\n\r'): return False
+        if any(c.isspace() for c in address): return False
         return True
 
-# --- Dedicated CallerForm ---
+# --- Dedicated CallerForm (From User's Working Version) ---
 class CallerForm(FlaskForm):
     """
     Form specifically for configuring and starting SRT streams in Caller mode.
@@ -224,10 +226,9 @@ class CallerForm(FlaskForm):
     target_port = IntegerField(
         'Target Port',
         validators=[DataRequired(), NumberRange(min=1, max=65535)],
-        default=10001,
+        default=10001, # Default target port
         render_kw={'class': 'form-control', 'min': '1', 'max': '65535'}
     )
-
     file_path = StringField(
         'File Path',
         validators=[DataRequired()],
@@ -237,32 +238,29 @@ class CallerForm(FlaskForm):
             'aria-describedby': 'fileHelpCaller'
         }
     )
-
     latency = IntegerField(
         'Latency (ms)',
         validators=[DataRequired(), NumberRange(min=20, max=8000)],
-        default=300,
+        default=300, # Default latency
         render_kw={'class': 'form-control', 'min': '20', 'max': '8000'}
     )
-
     overhead_bandwidth = IntegerField(
         'Overhead Bandwidth',
-        validators=[DataRequired(), NumberRange(min=1, max=99)],
-        default=25,
-        widget=PercentageInput(),
+        validators=[DataRequired(), NumberRange(min=1, max=99)], # MODIFIED Range
+        default=25, # Default overhead
+        widget=PercentageInput(), # Use custom widget
         render_kw={
             'class': 'form-control',
-            'min': '1',
-            'max': '99',
+            'min': '1',   # MODIFIED min
+            'max': '99',  # MODIFIED max
             'step': '1'
         },
         description="Extra bandwidth for packet recovery (SRT Guide recommends 1-99%)"
     )
-
     encryption = SelectField(
         'Encryption',
         choices=[('none', 'None'), ('aes-128', 'AES-128'), ('aes-256', 'AES-256')],
-        default='none',
+        default='none', # Default to no encryption
         render_kw={'class': 'form-select'}
     )
     passphrase = StringField(
@@ -270,10 +268,9 @@ class CallerForm(FlaskForm):
         validators=[Optional(), Length(min=10, max=128)],
         render_kw={'placeholder': 'Required if encryption enabled', 'class': 'form-control'}
     )
-
     qos = BooleanField(
         'Enable QoS',
-        default=False,
+        default=False, # Default to disabled
         render_kw={
             'class': 'form-check-input'
         },
@@ -281,29 +278,35 @@ class CallerForm(FlaskForm):
     )
 
     def validate(self, extra_validators=None):
-        valid = super(CallerForm, self).validate(extra_validators=extra_validators)
-        if not valid:
+        """
+        Extended validation ensuring encryption passphrase and target address format are correct.
+        """
+        if not super().validate(extra_validators):
             return False
-
         if self.encryption.data != 'none' and not self.passphrase.data:
             self.passphrase.errors.append('Passphrase is required when encryption is enabled.')
             return False
+        # SRT passphrase length validation (strict 10-79)
+        if self.encryption.data != 'none' and self.passphrase.data and (len(self.passphrase.data) < 10 or len(self.passphrase.data) > 79):
+             self.passphrase.errors.append('Passphrase must be between 10 and 79 characters for SRT.')
+             # return False # Uncomment if strictness required
 
         if not self._validate_target_address(self.target_address.data):
             self.target_address.errors.append('Invalid target address format (IP or hostname).')
             return False
-
         return True
 
     def _validate_target_address(self, address):
+        """ Basic validation for IP address or hostname format. """
         if not address or len(address) > 255: return False
-        if any(c in address for c in ' \t\n\r'): return False
+        if any(c.isspace() for c in address): return False
         return True
 
-# --- NetworkTestForm ---
+# --- *** REPLACED NetworkTestForm with Enhanced Version *** ---
 class NetworkTestForm(FlaskForm):
     """
-    UPDATED Form for network testing configuration, supporting different modes.
+    ENHANCED Form for network testing configuration, supporting different modes
+    and protocol selection for manual mode.
     """
     mode = RadioField(
         'Test Mode',
@@ -315,35 +318,47 @@ class NetworkTestForm(FlaskForm):
         default='closest',
         validators=[DataRequired()]
     )
-    
+
     region = SelectField(
         'Select Region',
-        choices=[('', '-- Select Region --')],
-        validators=[Optional()],
+        choices=[('', '-- Select Region --')], # Populated dynamically in routes
+        validators=[Optional()], # Required only if mode is regional
         render_kw={'class': 'form-select'}
     )
 
     manual_host = StringField(
         'Server IP / URL',
-        validators=[Optional(), Length(min=3, max=255)],
+        validators=[Optional(), Length(min=3, max=255)], # Required only if mode is manual
         render_kw={'placeholder': 'e.g., iperf.example.com', 'class': 'form-control'}
     )
-    
+
     manual_port = IntegerField(
         'Port',
-        validators=[Optional(), NumberRange(min=1, max=65535)],
+        validators=[Optional(), NumberRange(min=1, max=65535)], # Optional, defaults likely used if empty
         render_kw={'placeholder': 'e.g., 5201', 'class': 'form-control'}
+    )
+
+    # Added: Protocol selection for Manual mode
+    manual_protocol = SelectField(
+        'Protocol (Manual Only)',
+        choices=[
+            ('udp', 'UDP'),
+            ('tcp', 'TCP')
+        ],
+        default='udp', # Default to UDP for manual
+        validators=[Optional()], # Only relevant if mode is manual
+        render_kw={'class': 'form-select'}
     )
 
     duration = IntegerField(
         'Test Duration (sec)',
         default=5,
-        validators=[DataRequired(), NumberRange(min=3, max=10)],
+        validators=[DataRequired(), NumberRange(min=3, max=10)], # Short duration suitable for web UI
         render_kw={'class': 'form-control', 'min': '3', 'max': '10'}
     )
-    
+
     bitrate = SelectField(
-        'Test Bitrate (UDP)',
+        'Test Bitrate (UDP)', # Label clarifies this is primarily for UDP tests
         choices=[('5M', '5 Mbps'), ('10M', '10 Mbps'), ('20M', '20 Mbps'), ('50M', '50 Mbps')],
         default='10M',
         validators=[DataRequired()],
@@ -351,20 +366,24 @@ class NetworkTestForm(FlaskForm):
     )
 
     def validate(self, extra_validators=None):
+        """ Validate based on selected mode """
         valid = super(NetworkTestForm, self).validate(extra_validators=extra_validators)
         if not valid:
             return False
-
         if self.mode.data == 'manual' and not self.manual_host.data:
             self.manual_host.errors.append('Manual host/IP is required when Mode is set to Manual.')
             return False
         if self.mode.data == 'regional' and not self.region.data:
-            self.region.errors.append('Region selection is required when Mode is set to Auto (Regional).')
+            if len(self.region.choices) <= 1:
+                 self.region.errors.append('Region choices could not be loaded. Cannot validate selection.')
+            else:
+                 self.region.errors.append('Region selection is required when Mode is set to Auto (Regional).')
             return False
-
         return True
+# --- *** END ENHANCED NetworkTestForm *** ---
 
-# --- MediaUploadForm ---
+
+# --- MediaUploadForm (From User's Working Version) ---
 class MediaUploadForm(FlaskForm):
     """
     Form for uploading media files (.ts format only).
@@ -377,7 +396,7 @@ class MediaUploadForm(FlaskForm):
         ],
         render_kw={
             'class': 'form-control',
-            'accept': '.ts'
+            'accept': '.ts' # Hint for browser file selection
         }
     )
 
@@ -390,16 +409,17 @@ class MediaUploadForm(FlaskForm):
         }
     )
 
-# --- SettingsForm ---
+# --- SettingsForm (From User's Working Version) ---
 class SettingsForm(FlaskForm):
     """
-    Form for potential future system settings
+    Form for potential future system settings (e.g., max streams, logging).
+    (Currently unused in routes, but defined here for structure)
     """
     max_streams = IntegerField(
         'Maximum Concurrent Streams',
         validators=[
             DataRequired(),
-            NumberRange(min=1, max=10)
+            NumberRange(min=1, max=10) # Example range
         ],
         default=5,
         render_kw={
